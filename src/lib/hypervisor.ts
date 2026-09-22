@@ -12,9 +12,14 @@ export type HypervisorCapabilities = {
   qemu: boolean;
   qemuVersion: string | null;
   iso: boolean;
+  kernel: boolean;
   guests: number;
   node: string;
   region: string;
+  guestNet: string;
+  guestIp: string;
+  nic: string;
+  guestOs: string;
 };
 
 export type HypervisorDomain = {
@@ -28,6 +33,25 @@ export type HypervisorDomain = {
   memoryMb: number;
   vcpus: number;
   diskGb: number;
+  guestIp: string;
+  streamPath: string;
+};
+
+const OFFLINE_CAPS: HypervisorCapabilities & { error?: string } = {
+  hostname: "offline",
+  kvm: false,
+  nested: "n/a",
+  qemu: false,
+  qemuVersion: null,
+  iso: false,
+  kernel: false,
+  guests: 0,
+  node: "hypervisor-node-local",
+  region: "unreachable",
+  guestNet: "10.0.2.0/24",
+  guestIp: "10.0.2.15",
+  nic: "e1000 user-nat",
+  guestOs: "TinyCorePure64-15.0",
 };
 
 async function hyper<T>(path: string, init?: RequestInit): Promise<T> {
@@ -53,15 +77,7 @@ export async function fetchCapabilities(): Promise<HypervisorCapabilities & { er
     return await hyper<HypervisorCapabilities>("/capabilities");
   } catch (e) {
     return {
-      hostname: "offline",
-      kvm: false,
-      nested: "n/a",
-      qemu: false,
-      qemuVersion: null,
-      iso: false,
-      guests: 0,
-      node: "hypervisor-node-local",
-      region: "unreachable",
+      ...OFFLINE_CAPS,
       error: e instanceof Error ? e.message : "hypervisor unreachable",
     };
   }
@@ -70,6 +86,16 @@ export async function fetchCapabilities(): Promise<HypervisorCapabilities & { er
 export const getHypervisorStatus = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async () => fetchCapabilities());
+
+export const listDomains = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async () => {
+    try {
+      return await hyper<HypervisorDomain[]>("/domains");
+    } catch {
+      return [] as HypervisorDomain[];
+    }
+  });
 
 export const startDomain = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -90,12 +116,13 @@ export const startDomain = createServerFn({ method: "POST" })
           last_boot_at = now(),
           session_count = session_count + 1,
           stream_ticket = ${domain.ticket},
-          vnc_port = ${domain.vncPort}
+          vnc_port = ${domain.vncPort},
+          ipv4 = ${domain.guestIp}
       where id = ${data.id} and user_id = ${context.userId}
     `;
     await sql`
       insert into workspace_events (workspace_id, user_id, kind, detail)
-      values (${data.id}, ${context.userId}, 'boot', ${`KVM RFB ${domain.vncPort}`})
+      values (${data.id}, ${context.userId}, 'boot', ${`KVM RFB ${domain.vncPort} NAT ${domain.guestIp}`})
     `;
     return domain;
   });

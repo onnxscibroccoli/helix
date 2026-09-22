@@ -20,6 +20,7 @@ export function StreamViewer({
   const rfbRef = useRef<RFB | null>(null);
   const [status, setStatus] = useState<"connecting" | "live" | "lost">("connecting");
   const [clock, setClock] = useState("");
+  const [wsUrl, setWsUrl] = useState("");
 
   useEffect(() => {
     const tick = () =>
@@ -34,21 +35,20 @@ export function StreamViewer({
     if (!el) return;
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const url = `${proto}://${window.location.host}/kasm/ws/${domain.id}?ticket=${encodeURIComponent(domain.ticket)}`;
+    setWsUrl(`${proto}://${window.location.host}${domain.streamPath || `/kasm/ws/${domain.id}`}`);
     const rfb = new RFB(el, url);
     rfb.scaleViewport = true;
     rfb.clipViewport = true;
     rfb.background = "#09090b";
     rfb.focusOnClick = true;
     const onConnect = () => setStatus("live");
-    const onDisconnect = (ev: { detail?: { clean?: boolean } }) => {
-      setStatus(ev.detail?.clean ? "lost" : "lost");
-    };
+    const onDisconnectEv = () => setStatus("lost");
     rfb.addEventListener("connect", onConnect);
-    rfb.addEventListener("disconnect", onDisconnect);
+    rfb.addEventListener("disconnect", onDisconnectEv);
     rfbRef.current = rfb;
     return () => {
       rfb.removeEventListener("connect", onConnect);
-      rfb.removeEventListener("disconnect", onDisconnect);
+      rfb.removeEventListener("disconnect", onDisconnectEv);
       try {
         rfb.disconnect();
       } catch {
@@ -56,7 +56,7 @@ export function StreamViewer({
       }
       rfbRef.current = null;
     };
-  }, [domain.id, domain.ticket]);
+  }, [domain.id, domain.ticket, domain.streamPath]);
 
   return (
     <div className="relative flex h-dvh flex-col bg-background text-foreground">
@@ -66,12 +66,12 @@ export function StreamViewer({
           <p className="truncate text-sm font-medium">{workspace.name}</p>
           <Badge tone={workspace.kind === "persistent" ? "live" : "warn"}>{workspace.kind}</Badge>
           <Badge tone={status === "live" ? "ok" : status === "connecting" ? "live" : "danger"}>
-            {status === "live" ? "101 wss" : status === "connecting" ? "rfb" : "lost"}
+            {status === "live" ? "wss live" : status === "connecting" ? "rfb" : "lost"}
           </Badge>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <span className="hidden font-mono text-xs tabular-nums text-muted sm:inline">
-            :{domain.vncPort} · {domain.vcpus} vCPU · {domain.memoryMb} MiB
+          <span className="hidden font-mono text-xs tabular-nums text-muted lg:inline">
+            {domain.guestIp} · {domain.vcpus} vCPU · {domain.memoryMb} MiB
           </span>
           <span className="hidden font-mono text-xs tabular-nums text-muted sm:inline">{clock}</span>
           <Button
@@ -87,15 +87,22 @@ export function StreamViewer({
           </Button>
         </div>
       </header>
+      {wsUrl ? (
+        <p className="truncate border-b border-border bg-elevated px-3 py-1.5 font-mono text-[11px] text-muted sm:px-4">
+          {wsUrl}
+        </p>
+      ) : null}
       <div
         ref={screenRef}
         className={cn("helix-stream relative min-h-0 flex-1 overflow-hidden bg-background")}
         onClick={() => rfbRef.current?.focus()}
       />
       {status !== "live" ? (
-        <div className="pointer-events-none absolute inset-x-0 top-14 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-0 top-24 flex justify-center">
           <p className="rounded-sm bg-elevated px-3 py-2 font-mono text-xs text-muted">
-            {status === "connecting" ? "Upgrading WebSocket · attaching RFB canvas" : "Stream closed"}
+            {status === "connecting"
+              ? "Upgrading WebSocket · TinyCore is booting (kernel → CDE → X)"
+              : "Stream closed"}
           </p>
         </div>
       ) : null}

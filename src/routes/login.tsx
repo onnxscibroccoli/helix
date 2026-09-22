@@ -21,7 +21,7 @@ function Login() {
         </Link>
         <h1 className="text-2xl font-medium tracking-tight">Sign in</h1>
         <p className="mt-2 text-sm text-muted">
-          Google or X. Your persistent volume is mapped from the verified identity.
+          Google or X. Your nested KVM volume is mapped from the verified identity.
         </p>
         <div className="mt-8 flex flex-col gap-3">
           {isPending ? (

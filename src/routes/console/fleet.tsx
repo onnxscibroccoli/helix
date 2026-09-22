@@ -3,18 +3,27 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getHypervisorStatus, type HypervisorCapabilities } from "@/lib/hypervisor";
+import {
+  getHypervisorStatus,
+  listDomains,
+  type HypervisorCapabilities,
+  type HypervisorDomain,
+} from "@/lib/hypervisor";
 import { NETWORK } from "@/lib/fleet";
 
 export const Route = createFileRoute("/console/fleet")({ component: FleetPage });
 
 function FleetPage() {
   const [caps, setCaps] = useState<(HypervisorCapabilities & { error?: string }) | null>(null);
+  const [domains, setDomains] = useState<HypervisorDomain[] | null>(null);
 
   useEffect(() => {
     getHypervisorStatus()
       .then(setCaps)
       .catch(() => setCaps(null));
+    listDomains()
+      .then(setDomains)
+      .catch(() => setDomains([]));
   }, []);
 
   return (
@@ -37,8 +46,8 @@ function FleetPage() {
             <Stat k="Nested" v={caps.nested} />
             <Stat k="QEMU" v={caps.qemuVersion ?? "offline"} />
             <Stat k="Guests" v={String(caps.guests)} />
-            <Stat k="ISO" v={caps.iso ? "present" : "download"} />
-            <Stat k="Engine" v="qemu-system-x86_64" />
+            <Stat k="ISO / kernel" v={caps.iso && caps.kernel ? "ready" : "extract"} />
+            <Stat k="Guest OS" v={caps.guestOs} />
           </dl>
           {caps.error ? <p className="mt-4 text-sm text-danger">{caps.error}</p> : null}
         </Card>
@@ -46,30 +55,45 @@ function FleetPage() {
         <Skeleton className="h-48 w-full rounded-xl" />
       )}
       <Card className="p-6">
-        <h2 className="text-sm font-medium">Tenancy (Terraform)</h2>
+        <h2 className="text-sm font-medium">Guest network</h2>
         <p className="mt-2 text-sm text-muted">
-          OCI hypervisor nodes are declared in infra/terraform — VM.Standard3.Flex, nested virt, 200 GB volumes.
-          This control plane is bound to the local nested-KVM node until those instances are applied.
+          Each domain gets an e1000 NIC on QEMU user-mode NAT. Outbound internet is independent. Inbound is the
+          authenticated RFB WebSocket only — no tunnel, no extra relay.
         </p>
-        <pre className="mt-5 overflow-x-auto font-mono text-xs leading-relaxed text-muted">
-          {`resource "oci_core_instance" "hypervisor_node" {
-  shape = "VM.Standard3.Flex"
-  shape_config { ocpus = 8  memory_in_gbs = 64 }
-}`}
-        </pre>
+        <dl className="mt-5 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+          <Stat k="Mode" v={NETWORK.mode} />
+          <Stat k="NIC" v={NETWORK.nic} />
+          <Stat k="CIDR" v={NETWORK.guestCidr} />
+          <Stat k="DHCP" v={NETWORK.guestIp} />
+          <Stat k="Gateway" v={NETWORK.gateway} />
+          <Stat k="DNS" v={NETWORK.dns} />
+        </dl>
       </Card>
-      <Card className="p-6">
-        <h2 className="text-sm font-medium">Network isolation</h2>
-        <p className="mt-2 text-sm text-muted">
-          Public ingress is confined to {NETWORK.publicCidr}. Hypervisors sit on {NETWORK.computeCidr}. Guests land on{" "}
-          {NETWORK.bridgeCidr} behind user-net NAT for the local node, virbr0 on OCI.
-        </p>
-        <pre className="mt-5 overflow-x-auto font-mono text-xs leading-relaxed text-muted">
-          {`ebtables -A FORWARD -p IPv4 -i tap+ -o tap+ -j DROP
-iptables -A FORWARD -i virbr0 -o virbr0 -m physdev --physdev-is-bridged -j DROP
-gateway ${NETWORK.gateway}`}
-        </pre>
-      </Card>
+      <div>
+        <h2 className="text-sm font-medium">Live domains</h2>
+        <div className="mt-3 grid gap-3">
+          {domains === null ? (
+            <Skeleton className="h-24 w-full rounded-xl" />
+          ) : domains.length === 0 ? (
+            <Card className="text-sm text-muted">No QEMU domains running on this node.</Card>
+          ) : (
+            domains.map((d) => (
+              <Card key={d.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-sm">{d.id.slice(0, 8)}</p>
+                    <Badge tone={d.status === "running" ? "ok" : "default"}>{d.status}</Badge>
+                    <Badge tone={d.kind === "persistent" ? "live" : "warn"}>{d.kind}</Badge>
+                  </div>
+                  <p className="mt-1 font-mono text-xs text-muted">
+                    {d.guestIp} · vnc :{d.vncPort} · {d.memoryMb} MiB · {d.streamPath}
+                  </p>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }

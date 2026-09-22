@@ -1,12 +1,24 @@
 #!/usr/bin/env node
 /**
  * Nested KVM control plane.
- * Listens on 127.0.0.1:8090 — QEMU/KVM domains + RFB-over-WebSocket (Kasm-compatible).
+ * Listens on 127.0.0.1:8090 — QEMU/KVM domains + RFB-over-WebSocket.
+ *
+ * Guest stack (verified on this node):
+ *   TinyCorePure64 15 kernel+initrd (skips isolinux TIMEOUT)
+ *   CDE GUI from the signed ISO (flwm / wbar / aterm)
+ *   e1000 + QEMU user NAT 10.0.2.0/24 — outbound internet, no tunnel
  */
 import { createServer } from "node:http";
 import { spawn, execFile } from "node:child_process";
 import { createConnection } from "node:net";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostname as osHostname } from "node:os";
@@ -23,12 +35,19 @@ const ISO_URL =
   process.env.HELIX_ISO_URL ||
   "http://distro.ibiblio.org/tinycorelinux/15.x/x86_64/release/TinyCorePure64-15.0.iso";
 const DISKS = join(ROOT, "hypervisor/disks");
+const BOOT_DIR = join(ROOT, "hypervisor/boot");
+const KERNEL = join(BOOT_DIR, "vmlinuz64");
+const INITRD = join(BOOT_DIR, "corepure64.gz");
 const KVM_DEV = "/dev/kvm";
+const GUEST_IP = "10.0.2.15";
+const GUEST_NET = "10.0.2.0/24";
+const KERNEL_APPEND = "loglevel=3 cde vga=791";
 
 mkdirSync(DISKS, { recursive: true });
 mkdirSync(join(ROOT, "hypervisor/images"), { recursive: true });
+mkdirSync(BOOT_DIR, { recursive: true });
 
-/** @typedef {{ id: string, kind: string, status: string, pid: number | null, vncPort: number, display: number, ticket: string, logs: string[], startedAt: string | null, memoryMb: number, vcpus: number, diskGb: number }} Domain */
+/** @typedef {{ id: string, kind: string, status: string, pid: number | null, vncPort: number, display: number, ticket: string, logs: string[], startedAt: string | null, memoryMb: number, vcpus: number, diskGb: number, guestIp: string, streamPath: string }} Domain */
 
 /** @type {Map<string, Domain>} */
 const domains = new Map();
@@ -105,6 +124,73 @@ async function ensureIso() {
   await pipeline(res.body, createWriteStream(ISO));
 }
 
+function bootFilesReady() {
+  try {
+    return (
+      existsSync(KERNEL) &&
+      statSync(KERNEL).size > 1_000_000 &&
+      existsSync(INITRD) &&
+      statSync(INITRD).size > 1_000_000
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Pull vmlinuz64 + corepure64.gz out of the ISO so we never sit on isolinux TIMEOUT 600. */
+function extractBootFromIso() {
+  if (bootFilesReady()) return;
+  if (!existsSync(ISO) || statSync(ISO).size < 1_000_000) {
+    throw new Error("TinyCore ISO is missing; cannot extract kernel");
+  }
+  const buf = readFileSync(ISO);
+  const SECTOR = 2048;
+  const pvd = 16 * SECTOR;
+  if (buf.subarray(pvd + 1, pvd + 6).toString("ascii") !== "CD001") {
+    throw new Error("TinyCore image is not ISO9660");
+  }
+  const rootLen = buf[pvd + 156];
+  const root = buf.subarray(pvd + 156, pvd + 156 + rootLen);
+  const extent = root.readUInt32LE(2);
+  const size = root.readUInt32LE(10);
+  const wanted = { VMLINUZ64: KERNEL, "COREPURE64.GZ": INITRD };
+
+  function walk(ext, sz) {
+    let off = ext * SECTOR;
+    const end = off + sz;
+    while (off < end && off < buf.length) {
+      const recLen = buf[off];
+      if (!recLen) {
+        off = (Math.floor(off / SECTOR) + 1) * SECTOR;
+        continue;
+      }
+      const rec = buf.subarray(off, off + recLen);
+      const nameLen = rec[32];
+      const raw = rec
+        .subarray(33, 33 + nameLen)
+        .toString("ascii")
+        .split(";")[0]
+        .replace(/\.+$/, "");
+      const loc = rec.readUInt32LE(2);
+      const dlen = rec.readUInt32LE(10);
+      const flags = rec[25];
+      if (raw === "\u0000" || raw === "\u0001") {
+        off += recLen;
+        continue;
+      }
+      if (flags & 2) walk(loc, dlen);
+      else {
+        const dest = wanted[raw.toUpperCase()];
+        if (dest) writeFileSync(dest, buf.subarray(loc * SECTOR, loc * SECTOR + dlen));
+      }
+      off += recLen;
+    }
+  }
+
+  walk(extent, size);
+  if (!bootFilesReady()) throw new Error("Failed to extract TinyCore kernel/initrd from ISO");
+}
+
 function probeVnc(port) {
   return new Promise((resolve) => {
     const sock = createConnection({ host: "127.0.0.1", port });
@@ -153,6 +239,8 @@ async function startDomain({ id, kind }) {
   if (existing) await stopDomain(id);
 
   await ensureIso();
+  extractBootFromIso();
+
   const persistent = kind !== "ephemeral";
   const diskGb = persistent ? 8 : 2;
   const memoryMb = persistent ? 512 : 384;
@@ -177,30 +265,36 @@ async function startDomain({ id, kind }) {
     memoryMb,
     vcpus: 1,
     diskGb,
+    guestIp: GUEST_IP,
+    streamPath: `/kasm/ws/${id}`,
   };
   domains.set(id, domain);
   logLine(domain, `nested=${nestedFlag()} kvm=${KVM_DEV}`);
-  logLine(domain, `volume ${disk} (${diskGb}G qcow2)`);
+  logLine(domain, `volume ${disk} (${diskGb}G qcow2, ide)`);
+  logLine(domain, `kernel ${KERNEL} append="${KERNEL_APPEND}"`);
+  logLine(domain, `nic e1000 user-nat ${GUEST_NET} dhcp ${GUEST_IP} (outbound, no tunnel)`);
   logLine(domain, `qemu ${qemuBin()} -enable-kvm -vnc 127.0.0.1:${display}`);
 
   const args = [
-    "-L",
-    "/opt/qemu/usr/share/qemu",
     "-enable-kvm",
     "-cpu",
     "host",
     "-machine",
-    "q35,accel=kvm",
+    "pc,accel=kvm",
     "-m",
     String(memoryMb),
     "-smp",
     "1",
-    "-drive",
-    `file=${disk},if=virtio,cache=none,format=qcow2`,
+    "-kernel",
+    KERNEL,
+    "-initrd",
+    INITRD,
+    "-append",
+    KERNEL_APPEND,
     "-cdrom",
     ISO,
-    "-boot",
-    "order=dc",
+    "-drive",
+    `file=${disk},if=ide,format=qcow2`,
     "-vga",
     "std",
     "-display",
@@ -211,11 +305,12 @@ async function startDomain({ id, kind }) {
     "-vnc",
     `127.0.0.1:${display}`,
     "-netdev",
-    "user,id=n0",
+    `user,id=n0,net=${GUEST_NET},dhcpstart=${GUEST_IP},hostname=helix`,
     "-device",
-    "virtio-net-pci,netdev=n0",
+    "e1000,netdev=n0",
     "-name",
     `helix-${id.slice(0, 8)}`,
+    "-no-reboot",
   ];
 
   const child = spawn(qemuBin(), args, {
@@ -248,10 +343,10 @@ async function startDomain({ id, kind }) {
   if (!ready) {
     child.kill("SIGKILL");
     domain.status = "stopped";
-    throw new Error("VNC did not come up — guest failed to bind RFB");
+    throw new Error("VNC did not come up — guest failed to bind RFB. Check hypervisor logs.");
   }
   domain.status = "running";
-  logLine(domain, `RFB 003.008 on 127.0.0.1:${vncPort} · WebSocket /kasm/ws/${id}`);
+  logLine(domain, `RFB 003.008 on 127.0.0.1:${vncPort} · WebSocket ${domain.streamPath}`);
   return domain;
 }
 
@@ -295,6 +390,8 @@ function publicDomain(d) {
     memoryMb: d.memoryMb,
     vcpus: d.vcpus,
     diskGb: d.diskGb,
+    guestIp: d.guestIp,
+    streamPath: d.streamPath,
   };
 }
 
@@ -314,9 +411,14 @@ async function capabilities() {
     qemu: qemuAvailable(),
     qemuVersion,
     iso: existsSync(ISO),
+    kernel: bootFilesReady(),
     guests: [...domains.values()].filter((d) => d.status === "running").length,
     node: "hypervisor-node-local",
     region: process.env.HELIX_REGION || "local-nested-kvm",
+    guestNet: GUEST_NET,
+    guestIp: GUEST_IP,
+    nic: "e1000 user-nat",
+    guestOs: "TinyCorePure64-15.0",
   };
 }
 
@@ -373,7 +475,10 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/domains") {
       const body = await readJson(req);
       if (!body?.id) return send(res, 400, { error: "id required" });
-      const d = await startDomain({ id: String(body.id), kind: body.kind === "ephemeral" ? "ephemeral" : "persistent" });
+      const d = await startDomain({
+        id: String(body.id),
+        kind: body.kind === "ephemeral" ? "ephemeral" : "persistent",
+      });
       return send(res, 200, publicDomain(d));
     }
     send(res, 404, { error: "not found" });
@@ -426,7 +531,9 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[helix-hypervisor] nested=${nestedFlag()} kvm=${kvmPresent()} qemu=${qemuAvailable()} :${PORT}`);
+  console.log(
+    `[helix-hypervisor] nested=${nestedFlag()} kvm=${kvmPresent()} qemu=${qemuAvailable()} kernel=${bootFilesReady()} :${PORT}`,
+  );
 });
 
 function shutdown() {

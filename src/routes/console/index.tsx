@@ -58,8 +58,8 @@ function WorkspacesPage() {
         <p className="font-mono text-xs uppercase tracking-widest text-muted">Deploy</p>
         <h2 className="mt-1 text-xl font-medium tracking-tight">Nested KVM pipeline</h2>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Probe this node, allocate a volume, boot QEMU with KVM acceleration, then attach a Kasm-compatible RFB
-          stream over WebSocket. Sign-in already bound the volume namespace to your identity.
+          Probe this node, allocate a qcow2, boot TinyCore with KVM acceleration, then attach an RFB stream over
+          WebSocket. Sign-in already bound the volume namespace to your identity.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {caps ? (
@@ -67,7 +67,10 @@ function WorkspacesPage() {
               <Badge tone={caps.kvm ? "ok" : "danger"}>/dev/kvm {caps.kvm ? "live" : "missing"}</Badge>
               <Badge tone={caps.nested === "Y" || caps.nested === "1" ? "ok" : "warn"}>nested={caps.nested}</Badge>
               <Badge tone={caps.qemu ? "ok" : "danger"}>{caps.qemuVersion ?? "qemu offline"}</Badge>
-              <Badge tone="default">{caps.guests} guest{caps.guests === 1 ? "" : "s"}</Badge>
+              <Badge tone={caps.kernel ? "ok" : "warn"}>{caps.guestOs}</Badge>
+              <Badge tone="default">
+                {caps.guests} guest{caps.guests === 1 ? "" : "s"}
+              </Badge>
             </>
           ) : (
             <Skeleton className="h-6 w-48 rounded-full" />

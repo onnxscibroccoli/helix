@@ -21,15 +21,6 @@ export type Workspace = {
   vncPort: number | null;
 };
 
-export type WorkspaceFile = {
-  id: number;
-  workspaceId: string;
-  path: string;
-  content: string;
-  isDir: boolean;
-  updatedAt: string;
-};
-
 export type WorkspaceEvent = {
   id: number;
   workspaceId: string;
@@ -47,22 +38,6 @@ export type ValidationResult = {
   detail: string;
 };
 
-export const DEFAULT_KERNEL = "6.8.0-47-generic";
-
-export const AVAILABLE_KERNELS = [
-  {
-    id: "6.8.0-47-generic",
-    label: "Ubuntu 24.04 LTS",
-    note: "Stock generic kernel shipped with the image.",
-  },
-  {
-    id: "6.11.0-9-generic",
-    label: "HWE 24.04",
-    note: "Hardware enablement stack. Newer drivers, same userspace.",
-  },
-  {
-    id: "6.6.52-helix-custom",
-    label: "Helix custom",
-    note: "In-guest compiled kernel with nested virt and virtio baked in.",
-  },
-] as const;
+export const DEFAULT_KERNEL = "TinyCorePure64-15.0";
+export const GUEST_IP = "10.0.2.15";
+export const GUEST_NET = "10.0.2.0/24";

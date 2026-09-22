@@ -7,8 +7,8 @@
       "status": 200,
       "title": "Helix",
       "hasCanvas": false,
-      "bodyTextLen": 2247,
-      "bodyTextHash": "aa189f13a41da992d62470229e9664fefa7b238d9bd2051909c46d2e9aef866a",
+      "bodyTextLen": 2209,
+      "bodyTextHash": "a55df8dd71b03c554d8025365d9f9baa963ec81f379bba3d947a882742dbc5ea",
       "bodyTextPrefix": "Helix Console Sign in PERSISTENT CLOUD DESKTOP A Linux machine t",
       "horizontalOverflow": false,
       "consoleErrors": [],
@@ -21,9 +21,9 @@
       "status": 200,
       "title": "Helix",
       "hasCanvas": false,
-      "bodyTextLen": 2239,
-      "bodyTextHash": "e530d9cb92051d6d13ba3c1a4e1af7d4dfdc057df69bd01835bf74d17e616b35",
-      "bodyTextPrefix": "Helix Sign in PERSISTENT CLOUD DESKTOP A Linux machine that surv",
+      "bodyTextLen": 2201,
+      "bodyTextHash": "16f0122e765d2af8e42ce5be9a464460bbf3924414c594aa36810dc53f764b46",
+      "bodyTextPrefix": "Helix Sign in PERSISTENT CLOUD DESKTOP A Linux machine that stre",
       "horizontalOverflow": false,
       "consoleErrors": [],
       "pageErrors": [],
@@ -35,7 +35,6 @@
   "verdictFile": "/workspace/screenshots/app-builder-built.json",
   "divergesFromBaseline": true,
   "baselineReasons": [
-    "desktop: body text replaced (similar length, page start changed)",
-    "mobile: body text replaced (similar length, page start changed)"
+    "desktop: body text replaced (similar length, page start changed)"
   ]
 }

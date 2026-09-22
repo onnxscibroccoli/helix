@@ -22,7 +22,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#09090b" },
       {
         name: "description",
-        content: "Persistent cloud Linux desktops. Nested KVM, independent kernels, durable volumes.",
+        content: "Nested KVM Linux desktops. TinyCore GUI streamed over WebSocket, Google or X sign-in.",
       },
     ],
     links: [

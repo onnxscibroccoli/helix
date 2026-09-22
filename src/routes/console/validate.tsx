@@ -33,8 +33,8 @@ function ValidatePage() {
     <div className="grid gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <p className="max-w-xl text-sm text-muted">
-          The validation agent asserts nested KVM, the OIDC handshake, kernel swap with canary integrity, ephemeral
-          teardown, and the browser stream.
+          Live checks against this node: nested KVM, OIDC mapping, e1000 NAT, ephemeral teardown, and the RFB
+          WebSocket.
         </p>
         <Button variant="outline" disabled={running} onClick={() => void load()}>
           {running ? "Running…" : "Re-run proofs"}

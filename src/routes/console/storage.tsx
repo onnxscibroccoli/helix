@@ -22,16 +22,17 @@ function StoragePage() {
       <div className="grid gap-3 sm:grid-cols-2">
         <Card>
           <p className="font-mono text-xs uppercase tracking-widest text-subtle">Persistent tier</p>
-          <p className="mt-2 text-2xl font-medium tracking-tight">OCI block</p>
+          <p className="mt-2 text-2xl font-medium tracking-tight">qcow2 on node</p>
           <p className="mt-2 text-sm text-muted">
-            Paravirtualized attachment. 60 IOPS/GB, retained across reboot and re-provision. Home, kernels, canaries.
+            8G IDE disk kept across reconnect and reboot of the guest. TinyCore can format and install to it from the
+            live desktop.
           </p>
         </Card>
         <Card>
           <p className="font-mono text-xs uppercase tracking-widest text-subtle">Ephemeral tier</p>
-          <p className="mt-2 text-2xl font-medium tracking-tight">tmpfs / NVMe</p>
+          <p className="mt-2 text-2xl font-medium tracking-tight">unlinked on stop</p>
           <p className="mt-2 text-sm text-muted">
-            Destroyed on SessionEnding. No host block devices are visible to the guest. TAP released with the domain.
+            2G scratch qcow2. The daemon deletes the file when the domain exits. No leftover disk.
           </p>
         </Card>
       </div>
@@ -41,7 +42,7 @@ function StoragePage() {
           {spaces === null ? (
             <Skeleton className="h-24 w-full rounded-xl" />
           ) : spaces.length === 0 ? (
-            <Card className="text-sm text-muted">No volumes attached. Provision a studio to allocate a block device.</Card>
+            <Card className="text-sm text-muted">No volumes attached. Provision a studio to allocate a qcow2.</Card>
           ) : (
             spaces.map((ws) => (
               <Card key={ws.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -49,15 +50,15 @@ function StoragePage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium">{ws.name}</p>
                     <Badge tone={ws.kind === "persistent" ? "live" : "warn"}>
-                      {ws.kind === "persistent" ? "/dev/vda" : "tmpfs"}
+                      {ws.kind === "persistent" ? "retained" : "scratch"}
                     </Badge>
                   </div>
                   <p className="mt-1 font-mono text-xs text-muted">
-                    {ws.volumeGb} GB · {ws.hostNode} · {ws.ipv4}
+                    {ws.volumeGb} GB qcow2 · {ws.hostNode} · {ws.ipv4 ?? "10.0.2.15"}
                   </p>
                 </div>
                 <p className="font-mono text-xs tabular-nums text-muted">
-                  {ws.kind === "persistent" ? "retained indefinitely" : "destroyed on logout"}
+                  {ws.kind === "persistent" ? "kept on disk" : "destroyed on logout"}
                 </p>
               </Card>
             ))

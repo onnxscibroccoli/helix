@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 const STEPS = [
   { id: "kvm", label: "Nested KVM" },
   { id: "oidc", label: "OIDC session" },
-  { id: "volume", label: "Allocate volume" },
-  { id: "qemu", label: "Boot QEMU domain" },
-  { id: "kasm", label: "Kasm WebSocket" },
+  { id: "volume", label: "qcow2 volume" },
+  { id: "qemu", label: "Boot TinyCore" },
+  { id: "kasm", label: "WebSocket RFB" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -54,7 +54,7 @@ export function PipelineBoard({
     setLogs([]);
     setStates({ kvm: "run", oidc: "idle", volume: "idle", qemu: "idle", kasm: "idle" });
     try {
-      line("Probing /dev/kvm and nested=Y");
+      line("Probing /dev/kvm and nested paging");
       const live = await getHypervisorStatus();
       await onCaps();
       if (!live.kvm || !live.qemu) {
@@ -62,6 +62,7 @@ export function PipelineBoard({
         throw new Error(live.kvm ? "QEMU is not available on this node." : "/dev/kvm is missing.");
       }
       line(`${live.node} nested=${live.nested} ${live.qemuVersion ?? ""}`);
+      line(`guest ${live.guestOs} · ${live.nic} ${live.guestNet}`);
       setStep("kvm", "ok");
       setStep("oidc", "run");
       line("Mapping verified identity to an isolated volume namespace");
@@ -69,15 +70,16 @@ export function PipelineBoard({
       setStep("volume", "run");
       line(`Creating ${kind} workspace metadata`);
       const ws = await createWorkspace({ data: { kind } });
-      line(`Allocated ${ws.name} · ${ws.hostNode} · ${ws.ipv4}`);
+      line(`Allocated ${ws.name} · ${ws.hostNode} · qcow2 ${ws.volumeGb}G · NAT ${ws.ipv4}`);
       setStep("volume", "ok");
       setStep("qemu", "run");
-      line("Spawning qemu-system-x86_64 -enable-kvm -cpu host");
+      line("Spawning qemu-system-x86_64 -enable-kvm -kernel vmlinuz64 (skip isolinux)");
       const domain = await startDomain({ data: { id: ws.id, kind } });
-      for (const l of domain.logs.slice(-8)) line(l);
+      for (const l of domain.logs.slice(-10)) line(l);
       setStep("qemu", "ok");
       setStep("kasm", "run");
-      line(`RFB ${domain.vncPort} · ticket issued · attaching /kasm/ws/${ws.id.slice(0, 8)}`);
+      line(`RFB ${domain.vncPort} · ticket issued`);
+      line(`WebSocket ${domain.streamPath}?ticket=…`);
       setStep("kasm", "ok");
       await navigate({
         to: "/desktop/$workspaceId",
@@ -109,7 +111,7 @@ export function PipelineBoard({
               {kind === "persistent" ? <Badge tone="live">selected</Badge> : null}
             </div>
             <p className="mt-3 text-sm text-muted">
-              Nested KVM guest on a qcow2 volume. Desktop stream survives reconnect. Home directory is the disk.
+              Nested KVM guest on an 8G qcow2. TinyCore GUI stream survives reconnect. Disk is kept.
             </p>
           </button>
         </Card>
@@ -121,7 +123,7 @@ export function PipelineBoard({
               {kind === "ephemeral" ? <Badge tone="warn">selected</Badge> : null}
             </div>
             <p className="mt-3 text-sm text-muted">
-              Scratch domain. Disk unlinked on disconnect. Same KVM path, no leftover TAP or volume.
+              Scratch domain. qcow2 unlinked on disconnect. Same KVM path, same NAT, no leftover disk.
             </p>
           </button>
         </Card>
@@ -147,7 +149,7 @@ export function PipelineBoard({
         <pre className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed text-muted">
           {logs.length
             ? logs.join("\n")
-            : "Idle. Provisioning will probe KVM, allocate a volume, boot QEMU, and open the Kasm WebSocket."}
+            : "Idle. Provisioning probes KVM, allocates a qcow2, boots TinyCore over nested KVM, and opens the RFB WebSocket."}
         </pre>
       </Card>
     </div>

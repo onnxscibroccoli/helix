@@ -7,7 +7,8 @@ node_modules
 dist
 hypervisor/disks
 hypervisor/images
-hypervisor/nvram
+hypervisor/boot/vmlinuz64
+hypervisor/boot/corepure64.gz
 *.qcow2
 *.iso
 /tmp
