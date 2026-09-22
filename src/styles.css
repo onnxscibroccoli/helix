@@ -1,0 +1,108 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-background: #09090b;
+  --color-foreground: #f0f0f2;
+  --color-card: #111114;
+  --color-elevated: #18181c;
+  --color-muted: #8e8e97;
+  --color-subtle: #63636b;
+  --color-primary: #c5ced8;
+  --color-primary-foreground: #09090b;
+  --color-border: color-mix(in oklab, var(--color-foreground) 12%, transparent);
+  --color-border-strong: color-mix(in oklab, var(--color-foreground) 22%, transparent);
+  --color-ok: #6d9a7a;
+  --color-warn: #c4a265;
+  --color-danger: #c46b6b;
+  --color-ring: #c5ced8;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-border-hover: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  --shadow-panel: 0 24px 60px -28px rgba(0, 0, 0, 0.7);
+
+  --ease-out-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100%;
+    background: var(--color-background);
+    color: var(--color-foreground);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-primary) 30%, transparent);
+    color: var(--color-foreground);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.helix-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-foreground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-foreground) 5%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.helix-wash {
+  background:
+    radial-gradient(1000px 520px at 78% -8%, color-mix(in oklab, var(--color-primary) 8%, transparent), transparent 62%),
+    radial-gradient(720px 420px at 0% 108%, color-mix(in oklab, var(--color-ok) 5%, transparent), transparent 55%),
+    var(--color-background);
+}
+
+.helix-stream {
+  background: var(--color-background);
+}
+.helix-stream canvas {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 100%;
+}

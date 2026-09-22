@@ -1,0 +1,44 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-kvm
+  - qemu-utils
+  - libvirt-daemon-system
+  - libvirt-clients
+  - bridge-utils
+  - ovmf
+  - python3-pip
+  - docker.io
+  - nginx
+  - cpu-checker
+
+write_files:
+  - path: /etc/modprobe.d/kvm.conf
+    content: |
+      options kvm_intel nested=1 enable_apicv=1
+      options kvm_amd nested=1
+  - path: /etc/libvirt/qemu.conf
+    content: |
+      user = "root"
+      group = "root"
+      nvram = ["/usr/share/OVMF/OVMF_CODE_4M.fd:/usr/share/OVMF/OVMF_VARS_4M.fd"]
+  - path: /usr/local/bin/helix-ephemeral-teardown
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      GUEST_ID="$1"
+      virsh destroy "guest-${GUEST_ID}" || true
+      virsh undefine "guest-${GUEST_ID}" --nvram || true
+      umount "/mnt/ephemeral/${GUEST_ID}" || true
+      rm -rf "/mnt/ephemeral/${GUEST_ID}"
+      ip link delete "tap-${GUEST_ID}" 2>/dev/null || true
+
+runcmd:
+  - modprobe kvm_intel nested=1 || modprobe kvm_amd nested=1
+  - systemctl enable --now libvirtd
+  - systemctl enable --now docker
+  - usermod -aG libvirt,kvm,docker ubuntu
+  - ebtables -A FORWARD -p IPv4 -i tap+ -o tap+ -j DROP || true
+  - kvm-ok || true

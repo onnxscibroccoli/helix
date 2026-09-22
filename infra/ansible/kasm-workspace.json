@@ -1,0 +1,10 @@
+{
+  "workspace_type": "vm",
+  "protocol": "vnc",
+  "vnc_port": 5900,
+  "enable_nested_kvm": true,
+  "stream": "websocket",
+  "persistence": {
+    "mount_path": "/dev/oracleci/oci_user_volume"
+  }
+}

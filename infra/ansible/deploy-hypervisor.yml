@@ -1,0 +1,26 @@
+- name: Configure Production Hypervisor Node
+  hosts: hypervisors
+  become: true
+  tasks:
+    - name: Verify KVM module nested virtualization
+      ansible.builtin.shell: cat /sys/module/kvm_intel/parameters/nested || cat /sys/module/kvm_amd/parameters/nested
+      register: nested_check
+      failed_when: "'Y' not in nested_check.stdout and '1' not in nested_check.stdout"
+
+    - name: Ensure Kasm workspace directory
+      ansible.builtin.file:
+        path: /etc/kasm/workspaces
+        state: directory
+        mode: "0755"
+
+    - name: Configure Kasm Workspace JSON Definition for KVM Passthrough
+      ansible.builtin.copy:
+        src: kasm-workspace.json
+        dest: /etc/kasm/workspaces/kvm_vm_spec.json
+        mode: "0644"
+
+    - name: Pull Kasm Gateway & Deployment Containers
+      community.docker.docker_image:
+        name: "kasmweb/workspaces:1.15.0"
+        source: pull
+      ignore_errors: true

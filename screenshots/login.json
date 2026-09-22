@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/login",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Helix",
+      "hasCanvas": false,
+      "bodyTextLen": 124,
+      "bodyTextHash": "185a834a3b5259f1aee1204e0577b57d20c6336b29c48e3dced5a2562186b844",
+      "bodyTextPrefix": "Helix Sign in Google or X. Your persistent volume is mapped from",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Helix",
+      "hasCanvas": false,
+      "bodyTextLen": 124,
+      "bodyTextHash": "185a834a3b5259f1aee1204e0577b57d20c6336b29c48e3dced5a2562186b844",
+      "bodyTextPrefix": "Helix Sign in Google or X. Your persistent volume is mapped from",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/login.json"
+}

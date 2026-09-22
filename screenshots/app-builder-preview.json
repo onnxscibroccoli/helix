@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Helix",
+      "hasCanvas": false,
+      "bodyTextLen": 2220,
+      "bodyTextHash": "de093ee7cfadaa17bb5aa567f4842923dc29db0fb66a19607780392ecf377d09",
+      "bodyTextPrefix": "Helix Console PERSISTENT CLOUD DESKTOP A Linux machine that surv",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Helix",
+      "hasCanvas": false,
+      "bodyTextLen": 2212,
+      "bodyTextHash": "be53fbe300fb30e023de46214c30e6069eb322eb36d84d727b32fbb1ba5690e4",
+      "bodyTextPrefix": "Helix PERSISTENT CLOUD DESKTOP A Linux machine that survives the",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

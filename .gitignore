@@ -1,0 +1,16 @@
+node_modules
+.output
+.nitro
+.tanstack
+.wrangler
+.vercel
+dist
+hypervisor/disks
+hypervisor/images
+hypervisor/nvram
+*.qcow2
+*.iso
+/tmp
+screenshots/*.png
+.grok/preview.log
+.grok/og-pending

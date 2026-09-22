@@ -1,0 +1,9 @@
+endpoints:
+  gateway: https://gateway.helix.example
+  oidc: https://accounts.google.com/.well-known/openid-configuration
+canary:
+  path: /home/user/canary.txt
+kernels:
+  - 6.8.0-47-generic
+  - 6.11.0-9-generic
+  - 6.6.52-helix-custom
