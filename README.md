@@ -18,3 +18,7 @@ OCI tenancy resources live in `infra/terraform` (VCN, nested-KVM compute, 200 GB
 ## Proofs
 
 `test-suite/tests` covers IaC declarations, OIDC wiring, teardown scripts, and the WebSocket client. Live KVM assertions run on a node with `/dev/kvm`.
+
+## Macaly portal work
+
+The separate `apps/macaly-portal` app contains the Debian-targeted portal and Convex backend. See its README for implementation and verification limits. No usable cloud host has been provisioned by this change. The original hypervisor implementation remains unchanged.
