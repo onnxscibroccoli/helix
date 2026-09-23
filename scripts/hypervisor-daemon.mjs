@@ -22,7 +22,7 @@ const MEMORY_MB = Number(process.env.HELIX_VM_MEMORY_MB || 1024);
 const VCPUS = Number(process.env.HELIX_VM_VCPUS || 1);
 const BRIDGE = process.env.HELIX_LIBVIRT_NETWORK || "default";
 mkdirSync(DISKS,{recursive:true}); mkdirSync(ROOT,{recursive:true});
-function loadState(){try{return JSON.parse(readFileSync(STATE,"utf8"));}catch{return {tickets:{},kinds:{},disks:{},volumes:{}}}}
+function loadState(){try{const s=JSON.parse(readFileSync(STATE,"utf8"));return {tickets:{},kinds:{},disks:{},volumes:{},...s};}catch{return {tickets:{},kinds:{},disks:{},volumes:{}}}}
 let state=loadState();
 function saveState(){writeFileSync(STATE,JSON.stringify(state,null,2));}
 async function sh(args){const {stdout}=await exec(VIRSH,["-c",URI,...args],{timeout:15000});return stdout.trim();}
