@@ -1,0 +1,26 @@
+[Unit]
+Description=Helix encrypted per-workspace EBS volume agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/helix
+Environment=AWS_REGION=us-east-1
+Environment=HELIX_INSTANCE_ID=i-03b6a82d46271d9cd
+Environment=HELIX_AVAILABILITY_ZONE=us-east-1a
+Environment=HELIX_MOUNT_ROOT=/var/lib/helix/ebs
+Environment=HELIX_DEFAULT_VOLUME_GB=20
+Environment=HELIX_MAX_VOLUME_GB=1000
+EnvironmentFile=/etc/helix/ebs-agent.env
+ExecStart=/usr/bin/python3 /opt/helix/production/storage/helix-ebs-volume-agent.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/helix/ebs
+
+[Install]
+WantedBy=multi-user.target
