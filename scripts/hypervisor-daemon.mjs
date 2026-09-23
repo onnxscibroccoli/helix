@@ -39,10 +39,11 @@ mkdirSync(ROOT, { recursive: true });
 
 function loadState() {
   try { return JSON.parse(readFileSync(STATE, "utf8")); }
-  catch { return { tickets: {}, kinds: {} }; }
+  catch { return { tickets: {}, kinds: {}, owners: {} }; }
 }
 let state = loadState();
 state.storage ||= {};
+state.owners ||= {};
 function saveState() { writeFileSync(STATE, JSON.stringify(state, null, 2)); }
 
 async function sh(args) {
@@ -115,11 +116,12 @@ async function defineDomain(id, kind) {
   saveState();
   return name;
 }
-async function startDomain(id, kind) {
+async function startDomain(id, kind, owner) {
   if (!validId(id)) throw new Error("invalid workspace id");
   const name = domainName(id);
   const exists = await existsDomain(name);
   if (!exists) await defineDomain(id, kind);
+  if (owner) { state.owners[id] = String(owner); saveState(); }
   const s = await domainState(name);
   if (s !== "running") await sh(["start", name]);
   return describe(id);
@@ -148,6 +150,7 @@ async function destroyDomain(id) {
     });
   }
   delete state.tickets[id];
+  delete state.owners[id];
   delete state.storage[id];
   delete state.kinds[id];
   saveState();
@@ -163,7 +166,7 @@ async function describe(id) {
   const displayNumber = m ? Number(m[1]) : null;
   const disk = state.storage[id]?.mountPath ? `${state.storage[id].mountPath}/disk.qcow2` : diskPath(id);
   return {
-    id, kind: state.kinds[id] || "persistent", status: stateName === "running" ? "running" : "stopped",
+    id, owner: state.owners[id] || null, kind: state.kinds[id] || "persistent", status: stateName === "running" ? "running" : "stopped",
     domain: name, display: displayNumber, vnc: display,
     ticket: state.tickets[id] || null, streamPath: `/kasm/ws/${id}`,
     memoryMb: MEMORY_MB, vcpus: VCPUS, disk, storage: state.storage[id] || null
@@ -205,7 +208,7 @@ const server=createServer(async(req,res)=>{
     if(m && req.method==="DELETE") return json(res,200,await destroyDomain(m[1]));
     if(req.method==="POST" && url.pathname==="/domains") {
       const b=await body(req); if(!b.id) return json(res,400,{error:"id required"});
-      return json(res,200,await startDomain(String(b.id),b.kind==="ephemeral"?"ephemeral":"persistent"));
+      return json(res,200,await startDomain(String(b.id),b.kind==="ephemeral"?"ephemeral":"persistent",b.owner));
     }
     if(req.method==="POST" && url.pathname.endsWith("/stop")) {
       const id=url.pathname.split("/")[2]; return json(res,200,await stopDomain(id));
