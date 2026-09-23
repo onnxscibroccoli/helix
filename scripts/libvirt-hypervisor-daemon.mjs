@@ -148,185 +148,20 @@ async function domainXml(id, kind, disk) {
     <cmdline>loglevel=3 cde vga=791</cmdline>
     <boot dev='hd'/>
   </os>
-  ${diskXml}
-  <interface type='network'>
-    <source network='${GUEST_NET}'/>
-    <model type='virtio'/>
-  </interface>
-  <graphics type='vnc' listen='127.0.0.1' autoport='yes'/>
-  <video><model type='virtio'/></video>
-  <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
   <features><acpi/><apic/></features>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    ${diskXml}
+    <interface type='network'>
+      <source network='${GUEST_NET}'/>
+      <model type='virtio'/>
+    </interface>
+    <graphics type='vnc' listen='127.0.0.1' autoport='yes'/>
+    <video><model type='virtio'/></video>
+    <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
+  </devices>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
   <on_crash>destroy</on_crash>
 </domain>`;
 }
-
-async function reconcileOne(id) {
-  const state = loadState(id);
-  if (!state || !(await domainExists(id))) return null;
-  const status = await domainState(id);
-  const port = status === "running" ? await vncPort(id) : null;
-  const d = {
-    id, kind: state.kind, status: status === "running" ? "running" : "stopped",
-    vncPort: port, ticket: state.ticket, logs: [
-      `libvirt domain=${id}`,
-      `state=${status}`,
-      port ? `RFB 127.0.0.1:${port}` : "RFB unavailable",
-    ],
-    startedAt: state.createdAt, memoryMb: state.kind === "ephemeral" ? 384 : 768,
-    vcpus: 1, diskGb: state.kind === "ephemeral" ? 2 : 8,
-    guestIp: GUEST_IP, streamPath: `/kasm/ws/${id}`,
-  };
-  domains.set(id, d);
-  return d;
-}
-
-async function startDomain({ id, kind }) {
-  id = safeId(id);
-  kind = kind === "ephemeral" ? "ephemeral" : "persistent";
-  await ensureNetwork();
-  await ensureTinyCore();
-
-  const existing = await reconcileOne(id);
-  if (existing?.status === "running") return existing;
-  if (await domainExists(id)) await virsh(["destroy", id], true);
-
-  const disk = join(DISKS, id + ".qcow2");
-  const size = kind === "ephemeral" ? "2G" : "8G";
-  if (!existsSync(disk)) await qemuImg(["create", "-f", "qcow2", disk, size]);
-
-  const xml = await domainXml(id, kind, disk);
-  const xmlPath = join(STATE, id + ".xml");
-  writeFileSync(xmlPath, xml);
-  await virsh(["define", xmlPath]);
-  await virsh(["start", id]);
-
-  const d = {
-    id, kind, status: "running", vncPort: await vncPort(id),
-    ticket: randomBytes(24).toString("base64url"), logs: [
-      "libvirt define succeeded",
-      "libvirt start succeeded",
-      `KVM domain active · VNC 127.0.0.1:${await vncPort(id)}`,
-    ],
-    startedAt: new Date().toISOString(),
-    memoryMb: kind === "ephemeral" ? 384 : 768, vcpus: 1,
-    diskGb: kind === "ephemeral" ? 2 : 8, guestIp: GUEST_IP,
-    streamPath: `/kasm/ws/${id}`,
-  };
-  domains.set(id, d);
-  saveState(d);
-  return d;
-}
-
-async function stopDomain(id) {
-  id = safeId(id);
-  const d = domains.get(id) ?? await reconcileOne(id);
-  await virsh(["destroy", id], true);
-  await virsh(["undefine", id], true);
-  if (d?.kind === "ephemeral") {
-    try { unlinkSync(join(DISKS, id + ".qcow2")); } catch {}
-  }
-  domains.delete(id);
-  removeState(id);
-  return { ok: true, kind: d?.kind ?? "unknown" };
-}
-
-function publicDomain(d) {
-  return {
-    id: d.id, kind: d.kind, status: d.status, vncPort: d.vncPort,
-    ticket: d.ticket, logs: d.logs.slice(-40), startedAt: d.startedAt,
-    memoryMb: d.memoryMb, vcpus: d.vcpus, diskGb: d.diskGb,
-    guestIp: d.guestIp, streamPath: d.streamPath,
-  };
-}
-
-async function reconcileAll() {
-  await ensureNetwork();
-  let ids = [];
-  try {
-    const raw = await virsh(["list", "--all", "--name"]);
-    ids = raw.split("\n").map(s => s.trim()).filter(Boolean);
-  } catch {}
-  for (const id of ids) await reconcileOne(id);
-}
-
-async function capabilities() {
-  let qemuVersion = null;
-  try { qemuVersion = (await shell("qemu-system-x86_64", ["--version"])).stdout.split("\n")[0]; } catch {}
-  return {
-    hostname: hostname(), kvm: existsSync("/dev/kvm"),
-    nested: (() => {
-      for (const p of ["/sys/module/kvm_intel/parameters/nested","/sys/module/kvm_amd/parameters/nested"]) {
-        try { return readFileSync(p, "utf8").trim(); } catch {}
-      }
-      return "unknown";
-    })(),
-    qemu: Boolean(qemuVersion), qemuVersion,
-    iso: existsSync(ISO), kernel: existsSync(KERNEL) && existsSync(INITRD),
-    guests: [...domains.values()].filter(d => d.status === "running").length,
-    node: "libvirt-nested-kvm", region: process.env.HELIX_REGION ?? "us-east-1",
-    guestNet: "10.0.2.0/24", guestIp: GUEST_IP, nic: "virtio libvirt NAT",
-    guestOs: "TinyCorePure64-15.0",
-  };
-}
-
-function body(req) {
-  return new Promise((resolve, reject) => {
-    const parts = [];
-    req.on("data", c => parts.push(c));
-    req.on("end", () => { try { resolve(parts.length ? JSON.parse(Buffer.concat(parts)) : {}); } catch (e) { reject(e); } });
-    req.on("error", reject);
-  });
-}
-
-function send(res, code, value) {
-  const data = JSON.stringify(value);
-  res.writeHead(code, {"content-type":"application/json","content-length":Buffer.byteLength(data)});
-  res.end(data);
-}
-
-const server = createServer(async (req, res) => {
-  const u = new URL(req.url ?? "/", `http://${HOST}:${PORT}`);
-  try {
-    if (req.method === "GET" && u.pathname === "/health") return send(res, 200, {ok:true});
-    if (req.method === "GET" && u.pathname === "/capabilities") return send(res, 200, await capabilities());
-    if (req.method === "GET" && u.pathname === "/domains") return send(res, 200, [...domains.values()].map(publicDomain));
-    const m = u.pathname.match(/^\/domains\/([^/]+)$/);
-    if (m && req.method === "GET") {
-      const d = domains.get(m[1]) ?? await reconcileOne(m[1]);
-      return d ? send(res, 200, publicDomain(d)) : send(res, 404, {error:"not found"});
-    }
-    if (m && req.method === "DELETE") return send(res, 200, await stopDomain(m[1]));
-    if (req.method === "POST" && u.pathname === "/domains") {
-      const b = await body(req);
-      return send(res, 200, publicDomain(await startDomain({id:String(b.id),kind:b.kind})));
-    }
-    return send(res, 404, {error:"not found"});
-  } catch (e) {
-    return send(res, 500, {error:e instanceof Error ? e.message : "hypervisor error"});
-  }
-});
-
-const wss = new WebSocketServer({noServer:true});
-server.on("upgrade", (req, socket, head) => {
-  const u = new URL(req.url ?? "/", `http://${HOST}:${PORT}`);
-  const m = u.pathname.match(/^\/kasm\/ws\/([^/]+)$/);
-  const d = m ? domains.get(m[1]) : null;
-  if (!d || d.status !== "running" || u.searchParams.get("ticket") !== d.ticket) {
-    socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
-    socket.destroy(); return;
-  }
-  wss.handleUpgrade(req, socket, head, ws => {
-    const tcp = createConnection({host:"127.0.0.1",port:d.vncPort});
-    tcp.on("error", () => ws.close());
-    tcp.on("data", data => { if (ws.readyState === ws.OPEN) ws.send(data); });
-    ws.on("message", data => { if (!tcp.destroyed) tcp.write(data); });
-    const close = () => { try { tcp.destroy(); } catch {} };
-    ws.on("close", close); tcp.on("close", () => { try { ws.close(); } catch {} });
-  });
-});
-
-await reconcileAll();
-server.listen(PORT, HOST, () => console.log(`[helix-libvirt] KVM=${existsSync("/dev/kvm")} port=${PORT}`));
