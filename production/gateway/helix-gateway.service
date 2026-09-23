@@ -1,0 +1,19 @@
+[Unit]
+Description=Helix authenticated OIDC desktop gateway
+After=network-online.target helix-libvirt-hypervisor.service
+Wants=network-online.target
+Requires=helix-libvirt-hypervisor.service
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/helix
+EnvironmentFile=/etc/helix/gateway.env
+ExecStart=/usr/bin/node /opt/helix/production/gateway/helix-gateway.mjs
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/helix
+[Install]
+WantedBy=multi-user.target
