@@ -1,0 +1,36 @@
+name: production-validation
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contracts:
+    runs-on: ubuntu-latest
+    env: { HELIX_SKIP_LIVE: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=infra/terraform fmt -check
+      - run: terraform -chdir=infra/terraform init -backend=false
+      - run: terraform -chdir=infra/terraform validate
+      - run: python -m pip install --disable-pip-version-check pytest
+      - run: pytest -q test-suite/tests
+      - run: sudo apt-get update -qq && sudo apt-get install -y shellcheck && shellcheck production/ephemeral-teardown.sh
+  live-hypervisor:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, helix-hypervisor]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install --disable-pip-version-check pytest
+      - run: test -e /dev/kvm
+      - run: test -r /sys/module/kvm_intel/parameters/nested -o -r /sys/module/kvm_amd/parameters/nested
+      - run: pytest -q test-suite/tests/test_01_hypervisor.py
