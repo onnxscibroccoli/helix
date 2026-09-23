@@ -29,7 +29,7 @@ function cookie(n,v,max,secure=true){return n+"="+encodeURIComponent(v)+"; Path=
 function clearCookie(n){return cookie(n,"",0)}
 function json(res,status,body){const s=JSON.stringify(body);res.writeHead(status,{"content-type":"application/json","cache-control":"no-store","content-length":Buffer.byteLength(s)});res.end(s)}
 function html(res,status,body){res.writeHead(status,{"content-type":"text/html; charset=utf-8","cache-control":"no-store"});res.end(body)}
-function configured(){return Boolean(ISSUER&&CLIENT_ID&&CLIENT_SECRET&&REDIRECT_URI&&PUBLIC_ORIGIN)}
+function configured(){return Boolean(ISSUER&&CLIENT_ID&&CLIENT_SECRET&&REDIRECT_URI&&PUBLIC_ORIGIN&&!CLIENT_ID.startsWith("REPLACE_")&&!CLIENT_SECRET.startsWith("REPLACE_")&&!REDIRECT_URI.includes("REPLACE_WITH_")&&!PUBLIC_ORIGIN.includes("REPLACE_WITH_"))}
 async function discovery(){if(!ISSUER)throw new Error("OIDC_ISSUER_URL is not configured");if(!oidcConfigPromise)oidcConfigPromise=fetch(ISSUER.replace(/\/$/,"")+"/.well-known/openid-configuration").then(async r=>{if(!r.ok)throw new Error("OIDC discovery failed");return r.json()});return oidcConfigPromise}
 async function sign(payload,ttl){return new SignJWT(payload).setProtectedHeader({alg:"HS256"}).setIssuedAt().setExpirationTime(ttl+"s").sign(key)}
 async function verify(token){try{return token?(await jwtVerify(token,key,{algorithms:["HS256"]})).payload:null}catch{return null}}
