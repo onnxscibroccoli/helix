@@ -96,6 +96,15 @@ def device_path(volume_id):
     raise RuntimeError("attached EBS volume device was not discovered")
 
 
+def attachment_point():
+    instance = ec2.describe_instances(InstanceIds=[INSTANCE_ID])["Reservations"][0]["Instances"][0]
+    used = {m["DeviceName"] for m in instance.get("BlockDeviceMappings", [])}
+    for letter in "ghijklmnop":
+        candidate = f"/dev/sd{letter}"
+        if candidate not in used:
+            return candidate
+    raise RuntimeError("no free EBS attachment point on host")
+
 def attach(volume_id):
     volume = ec2.describe_volumes(VolumeIds=[volume_id])["Volumes"][0]
     attachments = volume.get("Attachments", [])
@@ -106,7 +115,7 @@ def attach(volume_id):
         ec2.attach_volume(
             VolumeId=volume_id,
             InstanceId=INSTANCE_ID,
-            Device="/dev/sdf",
+            Device=attachment_point(),
         )
         wait_volume(volume_id, "in-use")
     return device_path(volume_id)
@@ -123,19 +132,20 @@ def ensure_mount(workspace_id, size_gb):
     mount = os.path.join(ROOT, workspace_id)
     os.makedirs(mount, exist_ok=True)
 
-    probe = subprocess.run(
-        ["blkid", "-o", "value", "-s", "TYPE", device],
-        capture_output=True,
-        text=True,
-    )
-    if not probe.stdout.strip():
+    probe = subprocess.run(["blkid", "-o", "value", "-s", "TYPE", device], capture_output=True, text=True)
+    filesystem_device = device
+    if not probe.stdout.strip() and os.path.exists(device + "p1"):
+        partition_probe = subprocess.run(["blkid", "-o", "value", "-s", "TYPE", device + "p1"], capture_output=True, text=True)
+        if partition_probe.stdout.strip():
+            filesystem_device = device + "p1"
+    if not probe.stdout.strip() and filesystem_device == device:
         subprocess.run(["mkfs.ext4", "-F", device], check=True)
 
     mounted = subprocess.run(
         ["mountpoint", "-q", mount],
     ).returncode == 0
     if not mounted:
-        subprocess.run(["mount", device, mount], check=True)
+        subprocess.run(["mount", filesystem_device, mount], check=True)
 
     return {
         "workspaceId": workspace_id,
