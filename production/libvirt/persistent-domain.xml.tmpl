@@ -1,0 +1,15 @@
+<domain type='kvm'>
+  <name>helix-${WORKSPACE_ID}</name>
+  <uuid>${DOMAIN_UUID}</uuid>
+  <memory unit='GiB'>8</memory>
+  <currentMemory unit='GiB'>8</currentMemory>
+  <vcpu placement='static'>4</vcpu>
+  <cpu mode='host-passthrough' check='none'/>
+  <os><type arch='x86_64' machine='q35'>hvm</type><loader readonly='yes' secure='no' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader><nvram>/var/lib/libvirt/qemu/nvram/helix-${WORKSPACE_ID}_VARS.fd</nvram><boot dev='hd'/></os>
+  <features><acpi/><apic/></features>
+  <devices>
+    <disk type='block' device='disk'><driver name='qemu' type='raw' cache='none' io='native'/><source dev='${BLOCK_DEVICE}'/><target dev='vda' bus='virtio'/></disk>
+    <interface type='network'><source network='helix-isolated'/><model type='virtio'/></interface>
+    <graphics type='vnc' autoport='yes' listen='127.0.0.1'/>
+  </devices>
+</domain>

@@ -1,0 +1,21 @@
+[Unit]
+Description=Helix desktop gateway
+After=network-online.target libvirtd.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=helix
+Group=helix
+WorkingDirectory=/opt/helix-gateway
+EnvironmentFile=/etc/helix/gateway.env
+ExecStart=/opt/helix-gateway/bin/helix-gateway
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/helix
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+[Install]
+WantedBy=multi-user.target
