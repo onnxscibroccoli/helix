@@ -38,6 +38,27 @@ async function callback(req,res,u){const ck=parseCookies(req),state=u.searchPara
 async function hv(path,opts){const r=await fetch(HYPERVISOR+path,opts);const t=await r.text();let b;try{b=JSON.parse(t)}catch{b={raw:t}}return{status:r.status,body:b}}
 async function desktop(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(302,{location:"/auth/login"});return res.end()}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Helix Desktop</title><style>html,body,#screen{width:100%;height:100%;margin:0;background:#111}#status{position:fixed;z-index:2;top:8px;left:8px;color:#fff;font:14px system-ui;background:#222b;padding:6px 10px;border-radius:8px}</style><div id="status">Authorizing desktop…</div><div id="screen"></div><script type="module">import RFB from "/novnc/core/rfb.js";const id=ID_PLACEHOLDER;const status=document.getElementById("status");const r=await fetch("/api/v1/workspaces/"+encodeURIComponent(id));if(!r.ok){status.textContent="Workspace unavailable";throw new Error("workspace authorization failed")}const x=await r.json();if(x.status!=="running"){status.textContent="Workspace is not running";throw new Error("workspace is not running")}const scheme=location.protocol==="https:"?"wss":"ws";const rfb=new RFB(document.getElementById("screen"),scheme+"://"+location.host+x.streamPath+"?ticket="+encodeURIComponent(x.ticket));rfb.scaleViewport=true;rfb.resizeSession=false;rfb.addEventListener("connect",()=>status.textContent="Connected");rfb.addEventListener("disconnect",()=>status.textContent="Disconnected");</script>';return html(res,200,page.replace("ID_PLACEHOLDER",JSON.stringify(id)))}
 async function workspace(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(401);return res.end("unauthorized")}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});const d=await hv("/domains/"+encodeURIComponent(id));if(d.status!==200)return json(res,d.status,{error:"workspace not found"});if(!d.body.owner || d.body.owner!==s.sub)return json(res,403,{error:"workspace not authorized"});const ticket=await sign({sub:s.sub,workspace:id,kind:"desktop"},WS_TTL);return json(res,200,{workspace:id,status:d.body.status,display:d.body.display,streamPath:"/kasm/ws/"+id,ticket})}
+async function session(req){return verify(parseCookies(req)[COOKIE])}
+async function requestBody(req){return new Promise((resolve,reject)=>{const chunks=[];req.on("data",x=>chunks.push(x));req.on("end",()=>{try{resolve(chunks.length?JSON.parse(Buffer.concat(chunks)):{});}catch(e){reject(e)}});req.on("error",reject)})}
+async function workspaceList(req,res){
+  const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
+  const d=await hv("/domains"); if(d.status!==200)return json(res,d.status,{error:"workspace list unavailable"});
+  return json(res,200,{workspaces:(Array.isArray(d.body)?d.body:[]).filter(w=>w.owner===s.sub)});
+}
+async function workspaceCreate(req,res){
+  const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
+  const b=await requestBody(req);
+  const id=String(b.id||""); const kind=b.kind==="ephemeral"?"ephemeral":b.kind==="persistent"?"persistent":null;
+  if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});
+  if(!kind)return json(res,400,{error:"kind must be persistent or ephemeral"});
+  const existing=await hv("/domains/"+encodeURIComponent(id));
+  if(existing.status===200){
+    if(existing.body.owner!==s.sub)return json(res,403,{error:"workspace already belongs to another owner"});
+    return json(res,200,existing.body);
+  }
+  const d=await hv("/domains",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,kind,owner:s.sub})});
+  return json(res,d.status,d.body);
+}
 async function upgrade(req,socket,head){const u=new URL(req.url||"/","http://"+HOST+":"+PORT),m=u.pathname.match(/^\/kasm\/ws\/([^/]+)$/);if(!m){socket.destroy();return}const p=await verify(u.searchParams.get("ticket"));if(!p||p.kind!=="desktop"||p.workspace!==m[1]){socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");socket.destroy();return}const d=await hv("/domains/"+encodeURIComponent(m[1]));if(d.status!==200||d.body.status!=="running"||d.body.display==null){socket.destroy();return}const tcp=createConnection({host:"127.0.0.1",port:5900+Number(d.body.display)}),wss=new WebSocketServer({noServer:true});tcp.once("connect",()=>wss.handleUpgrade(req,socket,head,ws=>{const close=()=>{try{tcp.destroy()}catch{};try{if(ws.readyState===ws.OPEN)ws.close()}catch{}};tcp.on("data",b=>{if(ws.readyState===ws.OPEN)ws.send(b)});ws.on("message",b=>{if(!tcp.destroyed)tcp.write(b)});tcp.on("close",close);tcp.on("error",close);ws.on("close",close);ws.on("error",close)}));tcp.on("error",()=>socket.destroy())}
 const server=createServer(async (req,res)=>{
   try {
