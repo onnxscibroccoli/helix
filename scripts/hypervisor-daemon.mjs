@@ -30,6 +30,9 @@ const BASE = process.env.HELIX_BASE_IMAGE || `${DISKS}/debian-13-generic-amd64.q
 const MEMORY_MB = Number(process.env.HELIX_VM_MEMORY_MB || 1024);
 const VCPUS = Number(process.env.HELIX_VM_VCPUS || 1);
 const BRIDGE = process.env.HELIX_LIBVIRT_NETWORK || "default";
+const STORAGE_AGENT_URL = process.env.HELIX_STORAGE_AGENT_URL || "";
+const STORAGE_AGENT_TOKEN = process.env.HELIX_STORAGE_AGENT_TOKEN || "";
+const PERSISTENT_DISK_GB = Number(process.env.HELIX_PERSISTENT_DISK_GB || 20);
 
 mkdirSync(DISKS, { recursive: true });
 mkdirSync(ROOT, { recursive: true });
@@ -54,6 +57,16 @@ function validId(id) {
 }
 function domainName(id) { return `helix-${id}`; }
 function diskPath(id) { return `${DISKS}/${id}.qcow2`; }
+async function storageEnsure(id) {
+  if (!STORAGE_AGENT_URL) return null;
+  const response = await fetch(`${STORAGE_AGENT_URL}/volumes/ensure`, {
+    method: "POST",
+    headers: {"content-type": "application/json", "authorization": `Bearer ${STORAGE_AGENT_TOKEN}`},
+    body: JSON.stringify({workspaceId: id, sizeGb: PERSISTENT_DISK_GB}),
+  });
+  if (!response.ok) throw new Error(`storage agent ensure failed: ${response.status}`);
+  return response.json();
+}
 
 async function existsDomain(name) {
   try { await sh(["dominfo", name]); return true; } catch { return false; }
@@ -61,7 +74,7 @@ async function existsDomain(name) {
 async function domainState(name) {
   try { return (await sh(["domstate", name])).trim(); } catch { return "absent"; }
 }
-async function createDisk(id, sizeGb) {
+async function createDisk(id, sizeGb, persistentMount = null) {
   const disk = diskPath(id);
   if (existsSync(disk)) return disk;
   if (!existsSync(BASE)) throw new Error("base image missing; install the Helix host bootstrap/base image first");
@@ -70,7 +83,8 @@ async function createDisk(id, sizeGb) {
 }
 async function defineDomain(id, kind) {
   const name = domainName(id);
-  const disk = await createDisk(id, kind === "ephemeral" ? 8 : 20);
+  const storage = kind === "persistent" ? await storageEnsure(id) : null;
+  const disk = await createDisk(id, kind === "ephemeral" ? 8 : PERSISTENT_DISK_GB, storage?.mountPath || null);
   const xml = `<domain type='kvm'>
   <name>${name}</name>
   <memory unit='MiB'>${MEMORY_MB}</memory>
@@ -124,6 +138,12 @@ async function destroyDomain(id) {
   if (state.kinds[id] === "ephemeral") {
     try { unlinkSync(diskPath(id)); } catch {}
   }
+  if (state.kinds[id] === "persistent" && STORAGE_AGENT_URL) {
+    await fetch(`${STORAGE_AGENT_URL}/volumes/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: {"authorization": `Bearer ${STORAGE_AGENT_TOKEN}`},
+    });
+  }
   delete state.tickets[id];
   delete state.kinds[id];
   saveState();
@@ -141,7 +161,7 @@ async function describe(id) {
     id, kind: state.kinds[id] || "persistent", status: stateName === "running" ? "running" : "stopped",
     domain: name, display: displayNumber, vnc: display,
     ticket: state.tickets[id] || null, streamPath: `/kasm/ws/${id}`,
-    memoryMb: MEMORY_MB, vcpus: VCPUS, disk: diskPath(id)
+    memoryMb: MEMORY_MB, vcpus: VCPUS, disk, storage: storage || null
   };
 }
 async function capabilities() {
