@@ -8,9 +8,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/helix
 EnvironmentFile=/etc/helix/gateway.env
-EnvironmentFile=-/run/helix-gateway-oidc.env
-ExecStartPre=/bin/sh -c 'printf "OIDC_CLIENT_SECRET=%s\\n" "$(/usr/bin/aws cognito-idp describe-user-pool-client --region us-east-1 --user-pool-id us-east-1_40X8yJKI2 --client-id 4co7gd1bo4re206klembj9nr43 --query UserPoolClient.ClientSecret --output text)" > /run/helix-gateway-oidc.env && chmod 600 /run/helix-gateway-oidc.env'
-ExecStart=/usr/bin/node /opt/helix/production/gateway/helix-gateway.mjs
+ExecStart=/opt/helix/production/gateway/start-helix-gateway.sh
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
