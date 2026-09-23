@@ -40,9 +40,22 @@ def volume_for(workspace_id):
         ]
     )
     volumes = response.get("Volumes", [])
-    if len(volumes) > 1:
-        raise RuntimeError("workspace has multiple provider volumes")
-    return volumes[0] if volumes else None
+    if not volumes:
+        return None
+    attached_here = [
+        v for v in volumes
+        if any(a.get("InstanceId") == INSTANCE_ID and a.get("State") == "attached" for a in v.get("Attachments", []))
+    ]
+    if len(attached_here) == 1:
+        return attached_here[0]
+    if len(attached_here) > 1:
+        raise RuntimeError("workspace has multiple volumes attached to this host")
+    if len(volumes) == 1:
+        return volumes[0]
+    available = [v for v in volumes if v.get("State") == "available"]
+    if len(available) == 1:
+        return available[0]
+    raise RuntimeError("workspace has multiple provider volumes")
 
 
 def wait_volume(volume_id, state):
