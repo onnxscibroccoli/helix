@@ -39,6 +39,34 @@ async function hv(path,opts){const r=await fetch(HYPERVISOR+path,opts);const t=a
 async function desktop(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(302,{location:"/auth/login"});return res.end()}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Helix Desktop</title><style>html,body,#screen{width:100%;height:100%;margin:0;background:#111}#status{position:fixed;z-index:2;top:8px;left:8px;color:#fff;font:14px system-ui;background:#222b;padding:6px 10px;border-radius:8px}</style><div id="status">Authorizing desktop…</div><div id="screen"></div><script type="module">import RFB from "/novnc/core/rfb.js";const id=ID_PLACEHOLDER;const status=document.getElementById("status");const r=await fetch("/api/v1/workspaces/"+encodeURIComponent(id));if(!r.ok){status.textContent="Workspace unavailable";throw new Error("workspace authorization failed")}const x=await r.json();if(x.status!=="running"){status.textContent="Workspace is not running";throw new Error("workspace is not running")}const scheme=location.protocol==="https:"?"wss":"ws";const rfb=new RFB(document.getElementById("screen"),scheme+"://"+location.host+x.streamPath+"?ticket="+encodeURIComponent(x.ticket));rfb.scaleViewport=true;rfb.resizeSession=false;rfb.addEventListener("connect",()=>status.textContent="Connected");rfb.addEventListener("disconnect",()=>status.textContent="Disconnected");</script>';return html(res,200,page.replace("ID_PLACEHOLDER",JSON.stringify(id)))}
 async function workspace(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(401);return res.end("unauthorized")}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});const d=await hv("/domains/"+encodeURIComponent(id));if(d.status!==200)return json(res,d.status,{error:"workspace not found"});const ticket=await sign({sub:s.sub,workspace:id,kind:"desktop"},WS_TTL);return json(res,200,{workspace:id,status:d.body.status,display:d.body.display,streamPath:"/kasm/ws/"+id,ticket})}
 async function upgrade(req,socket,head){const u=new URL(req.url||"/","http://"+HOST+":"+PORT),m=u.pathname.match(/^\/kasm\/ws\/([^/]+)$/);if(!m){socket.destroy();return}const p=await verify(u.searchParams.get("ticket"));if(!p||p.kind!=="desktop"||p.workspace!==m[1]){socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");socket.destroy();return}const d=await hv("/domains/"+encodeURIComponent(m[1]));if(d.status!==200||d.body.status!=="running"||d.body.display==null){socket.destroy();return}const tcp=createConnection({host:"127.0.0.1",port:5900+Number(d.body.display)}),wss=new WebSocketServer({noServer:true});tcp.once("connect",()=>wss.handleUpgrade(req,socket,head,ws=>{const close=()=>{try{tcp.destroy()}catch{};try{if(ws.readyState===ws.OPEN)ws.close()}catch{}};tcp.on("data",b=>{if(ws.readyState===ws.OPEN)ws.send(b)});ws.on("message",b=>{if(!tcp.destroyed)tcp.write(b)});tcp.on("close",close);tcp.on("error",close);ws.on("close",close);ws.on("error",close)}));tcp.on("error",()=>socket.destroy())}
-const server=createServer(async(req,res)=>{try{const u=new URL(req.url||"/","http://"+HOST+":"+PORT);if(req.method==="GET"&&u.pathname==="/health")return json(res,200,{ok:true,oidcConfigured:configured(),publicOrigin:PUBLIC_ORIGIN||null});if(req.method==="GET"&&u.pathname==="/auth/login")return login(req,res);if(req.method==="GET"&&u.pathname==="/auth/callback")return callback(req,res,u);if(req.method==="GET"&&u.pathname==="/auth/logout"){res.writeHead(302,{location:"/","set-cookie":clearCookie(COOKIE)});return res.end()}if(req.method==="GET"&&u.pathname.startsWith("/api/v1/workspaces/"))return workspace(req,res,u.pathname.split("/").pop());if(req.method==="GET"&&u.pathname.startsWith("/desktop/"))return desktop(req,res,u.pathname.split("/").pop());if(req.method==="GET"&&u.pathname==="/"){const s=await verify(parseCookies(req)[COOKIE]);if(!s)return html(res,200,'<h1>Helix Cloud Desktop</h1><p>Authenticated desktop gateway.</p><a href="/auth/login">Sign in</a>');return html(res,200,"<h1>Helix Cloud Desktop</h1><p>Signed in.</p><a href="/auth/logout">Sign out</a>")}return json(res,404,{error:"not found"})}catch(e){console.error(e);return json(res,500,{error:"gateway error"})}});
+const server=createServer(async (req,res)=>{
+  try {
+    const u=new URL(req.url||"/","http://"+HOST+":"+PORT);
+    if(req.method==="GET" && u.pathname==="/health") {
+      return json(res,200,{ok:true,oidcConfigured:configured(),publicOrigin:PUBLIC_ORIGIN||null});
+    }
+    if(req.method==="GET" && u.pathname==="/auth/login") return login(req,res);
+    if(req.method==="GET" && u.pathname==="/auth/callback") return callback(req,res,u);
+    if(req.method==="GET" && u.pathname==="/auth/logout") {
+      res.writeHead(302,{location:"/", "set-cookie":clearCookie(COOKIE)});
+      return res.end();
+    }
+    if(req.method==="GET" && u.pathname.startsWith("/api/v1/workspaces/")) {
+      return workspace(req,res,u.pathname.split("/").pop());
+    }
+    if(req.method==="GET" && u.pathname.startsWith("/desktop/")) {
+      return desktop(req,res,u.pathname.split("/").pop());
+    }
+    if(req.method==="GET" && u.pathname==="/") {
+      const s=await verify(parseCookies(req)[COOKIE]);
+      if(!s) return html(res,200,"<h1>Helix Cloud Desktop</h1><p>Authenticated desktop gateway.</p><a href=\"/auth/login\">Sign in</a>");
+      return html(res,200,"<h1>Helix Cloud Desktop</h1><p>Signed in.</p><a href=\"/auth/logout\">Sign out</a>");
+    }
+    return json(res,404,{error:"not found"});
+  } catch(e) {
+    console.error(e);
+    return json(res,500,{error:"gateway error"});
+  }
+});
 server.on("upgrade",(req,socket,head)=>void upgrade(req,socket,head));
 server.listen(PORT,HOST,()=>console.log("[helix-gateway] "+HOST+":"+PORT+" oidc="+configured()));
