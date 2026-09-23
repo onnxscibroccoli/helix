@@ -22,7 +22,7 @@ const SESSION_TTL = Number(process.env.SESSION_TTL_SECONDS || 3600);
 const WS_TTL = Number(process.env.WS_TICKET_TTL_SECONDS || 60);
 const COOKIE = "helix_session";
 const require = createRequire(import.meta.url);
-const NOVNC_ROOT = resolve(require.resolve("@novnc/novnc"), "..");
+const NOVNC_ROOT = resolve(require.resolve("@novnc/novnc"), "..", "..");
 const STATE_COOKIE = "helix_oidc_state";
 const NONCE_COOKIE = "helix_oidc_nonce";
 if (!SESSION_SECRET) throw new Error("SESSION_SIGNING_SECRET is required");
