@@ -87,7 +87,7 @@ async function ensureVolume(workspaceId) {
         ],
       }],
     }));
-    v = r.Volume;
+    v = r;
     created = true;
   }
   if (!v?.VolumeId) throw new Error("EC2 did not return a volume id");
