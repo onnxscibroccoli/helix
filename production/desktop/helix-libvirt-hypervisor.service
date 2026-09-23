@@ -1,0 +1,26 @@
+[Unit]
+Description=Helix libvirt workspace reconciler
+After=network-online.target libvirtd.service
+Wants=network-online.target
+Requires=libvirtd.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/helix
+Environment=HYPERVISOR_PORT=8090
+Environment=HELIX_DISKS=/var/lib/libvirt/images/helix-workspaces
+Environment=HELIX_BASE_IMAGE=/var/lib/libvirt/images/helix-dev/debian-13-generic-amd64.qcow2
+Environment=HELIX_LIBVIRT_NETWORK=default
+Environment=HELIX_VM_MEMORY_MB=768
+Environment=HELIX_VM_VCPUS=1
+ExecStart=/usr/bin/node /opt/helix/scripts/hypervisor-daemon.mjs
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/libvirt/images/helix-workspaces /var/lib/helix
+
+[Install]
+WantedBy=multi-user.target
