@@ -143,14 +143,14 @@ async function destroyDomain(id) {
   if (state.kinds[id] === "ephemeral") {
     try { unlinkSync(diskPath(id)); } catch {}
   }
-  if (state.kinds[id] === "persistent" && STORAGE_AGENT_URL) {
-    await fetch(`${STORAGE_AGENT_URL}/volumes/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      headers: {"authorization": `Bearer ${STORAGE_AGENT_TOKEN}`},
-    });
-  }
+  // Persistent workspaces retain their provider volume. Deleting a domain must
+  // never delete the user's persistent EBS volume. The tagged volume remains
+  // discoverable and can be remounted if the workspace is recreated.
   delete state.tickets[id];
   delete state.owners[id];
+  delete state.storage[id];
+  delete state.kinds[id];
+  saveState();
   delete state.storage[id];
   delete state.kinds[id];
   saveState();
