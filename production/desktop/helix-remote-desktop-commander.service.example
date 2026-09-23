@@ -1,0 +1,22 @@
+[Unit]
+Description=Helix Remote Desktop Commander device agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=CHANGE_ME
+Group=CHANGE_ME
+WorkingDirectory=CHANGE_ME
+Environment=HOME=CHANGE_ME
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npx --yes @wonderwhy-er/desktop-commander@0.2.51 remote
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
