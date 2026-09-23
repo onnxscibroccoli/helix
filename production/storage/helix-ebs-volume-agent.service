@@ -19,7 +19,6 @@ Restart=always
 RestartSec=3
 NoNewPrivileges=false
 PrivateTmp=true
-ProtectSystem=full
 ReadWritePaths=/var/lib/helix
 
 [Install]
