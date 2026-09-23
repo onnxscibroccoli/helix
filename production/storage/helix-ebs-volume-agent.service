@@ -14,7 +14,7 @@ Environment=HELIX_MOUNT_ROOT=/var/lib/helix/ebs
 Environment=HELIX_DEFAULT_VOLUME_GB=20
 Environment=HELIX_MAX_VOLUME_GB=1000
 EnvironmentFile=/etc/helix/ebs-agent.env
-ExecStart=/usr/bin/python3 /opt/helix/production/storage/helix-ebs-volume-agent.py
+ExecStart=/opt/helix/.venv/bin/python /opt/helix/production/storage/helix-ebs-volume-agent.py
 Restart=always
 RestartSec=3
 NoNewPrivileges=false
