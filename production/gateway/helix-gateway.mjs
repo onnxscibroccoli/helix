@@ -51,6 +51,8 @@ const server=createServer(async (req,res)=>{
       res.writeHead(302,{location:"/", "set-cookie":clearCookie(COOKIE)});
       return res.end();
     }
+    if(req.method==="GET" && u.pathname==="/api/v1/workspaces") return workspaceList(req,res);
+    if(req.method==="POST" && u.pathname==="/api/v1/workspaces") return workspaceCreate(req,res);
     if(req.method==="GET" && u.pathname.startsWith("/api/v1/workspaces/")) {
       return workspace(req,res,u.pathname.split("/").pop());
     }
@@ -60,7 +62,7 @@ const server=createServer(async (req,res)=>{
     if(req.method==="GET" && u.pathname==="/") {
       const s=await verify(parseCookies(req)[COOKIE]);
       if(!s) return html(res,200,"<h1>Helix Cloud Desktop</h1><p>Authenticated desktop gateway.</p><a href=\"/auth/login\">Sign in</a>");
-      return html(res,200,"<h1>Helix Cloud Desktop</h1><p>Signed in.</p><a href=\"/auth/logout\">Sign out</a>");
+      return html(res,200,"<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Helix Cloud Desktop</title><style>body{font:16px system-ui;max-width:760px;margin:40px auto;padding:0 20px}li{margin:12px 0}button,input,select{padding:8px;margin:4px}</style><h1>Helix Cloud Desktop</h1><p>Signed in as "+String(s.email||s.sub).replace(/[<>&]/g,"")+"</p><form id=\"create\"><input id=\"id\" placeholder=\"workspace id\" required><select id=\"kind\"><option value=\"persistent\">persistent</option><option value=\"ephemeral\">ephemeral</option></select><button>Create desktop</button></form><ul id=\"list\"></ul><p><a href=\"/auth/logout\">Sign out</a></p><script>const list=document.getElementById("list");async function refresh(){const r=await fetch("/api/v1/workspaces");const x=await r.json();list.innerHTML=x.workspaces.map(w=>"<li><a href=\"/desktop/"+encodeURIComponent(w.id)+"\">"+w.id+"</a> — "+w.kind+" — "+w.status+"</li>").join("")||"<li>No workspaces yet.</li>"}document.getElementById("create").onsubmit=async e=>{e.preventDefault();const r=await fetch("/api/v1/workspaces",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:document.getElementById("id").value,kind:document.getElementById("kind").value})});if(!r.ok)alert(await r.text());document.getElementById("id").value="";refresh()};refresh();</script>");
     }
     return json(res,404,{error:"not found"});
   } catch(e) {
