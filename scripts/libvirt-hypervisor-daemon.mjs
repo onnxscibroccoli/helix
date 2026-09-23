@@ -9,7 +9,7 @@
  * Browser stream: authenticated upstream gateway -> /kasm/ws/:id -> this daemon
  */
 import { createServer } from "node:http";
-import { createConnection, execFile } from "node:net";
+import { createConnection } from "node:net";
 import { execFile as exec } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from "node:fs";
