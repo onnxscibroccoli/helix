@@ -26,6 +26,7 @@ def tags(workspace_id):
     return [
         {"Key": "Project", "Value": "Helix"},
         {"Key": "ManagedBy", "Value": "helix-ebs-agent"},
+        {"Key": "StorageRole", "Value": "persistent-workspace"},
         {"Key": "WorkspaceId", "Value": workspace_id},
     ]
 
