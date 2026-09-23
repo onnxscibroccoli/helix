@@ -1,546 +1,212 @@
 #!/usr/bin/env node
 /**
- * Nested KVM control plane.
- * Listens on 127.0.0.1:8090 — QEMU/KVM domains + RFB-over-WebSocket.
+ * Helix libvirt-backed workspace reconciler.
  *
- * Guest stack (verified on this node):
- *   TinyCorePure64 15 kernel+initrd (skips isolinux TIMEOUT)
- *   CDE GUI from the signed ISO (flwm / wbar / aterm)
- *   e1000 + QEMU user NAT 10.0.2.0/24 — outbound internet, no tunnel
+ * Control API: 127.0.0.1:8090
+ * Hypervisor: qemu:///system (libvirt)
+ * Display: per-domain localhost-only VNC
+ *
+ * The gateway is responsible for authenticating users and issuing the short-lived
+ * ticket used by /kasm/ws/:id. This process never exposes libvirt or VNC publicly.
  */
 import { createServer } from "node:http";
-import { spawn, execFile } from "node:child_process";
 import { createConnection } from "node:net";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { hostname as osHostname } from "node:os";
-import { randomBytes as rb } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { WebSocketServer } from "ws";
+import { randomBytes } from "node:crypto";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const exec = promisify(execFile);
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.HYPERVISOR_PORT || 8090);
-const QEMU_BIN = process.env.QEMU_BIN || join(ROOT, "hypervisor/bin/qemu-system-x86_64");
-const QEMU_IMG = process.env.QEMU_IMG || join(ROOT, "hypervisor/bin/qemu-img");
-const ISO = process.env.HELIX_ISO || join(ROOT, "hypervisor/images/TinyCorePure64.iso");
-const ISO_URL =
-  process.env.HELIX_ISO_URL ||
-  "http://distro.ibiblio.org/tinycorelinux/15.x/x86_64/release/TinyCorePure64-15.0.iso";
-const DISKS = join(ROOT, "hypervisor/disks");
-const BOOT_DIR = join(ROOT, "hypervisor/boot");
-const KERNEL = join(BOOT_DIR, "vmlinuz64");
-const INITRD = join(BOOT_DIR, "corepure64.gz");
-const KVM_DEV = "/dev/kvm";
-const GUEST_IP = "10.0.2.15";
-const GUEST_NET = "10.0.2.0/24";
-const KERNEL_APPEND = "loglevel=3 cde vga=791";
+const VIRSH = process.env.VIRSH_BIN || "/usr/bin/virsh";
+const QEMU_IMG = process.env.QEMU_IMG || "/usr/bin/qemu-img";
+const URI = "qemu:///system";
+const ROOT = "/var/lib/helix";
+const DISKS = process.env.HELIX_DISKS || `${ROOT}/disks`;
+const STATE = process.env.HELIX_HYPERVISOR_STATE || `${ROOT}/hypervisor-state.json`;
+const BASE = process.env.HELIX_BASE_IMAGE || `${DISKS}/debian-13-generic-amd64.qcow2`;
+const MEMORY_MB = Number(process.env.HELIX_VM_MEMORY_MB || 1024);
+const VCPUS = Number(process.env.HELIX_VM_VCPUS || 1);
+const BRIDGE = process.env.HELIX_LIBVIRT_NETWORK || "default";
 
 mkdirSync(DISKS, { recursive: true });
-mkdirSync(join(ROOT, "hypervisor/images"), { recursive: true });
-mkdirSync(BOOT_DIR, { recursive: true });
+mkdirSync(ROOT, { recursive: true });
 
-/** @typedef {{ id: string, kind: string, status: string, pid: number | null, vncPort: number, display: number, ticket: string, logs: string[], startedAt: string | null, memoryMb: number, vcpus: number, diskGb: number, guestIp: string, streamPath: string }} Domain */
-
-/** @type {Map<string, Domain>} */
-const domains = new Map();
-/** @type {Map<number, import('node:child_process').ChildProcess>} */
-const children = new Map();
-
-function logLine(domain, line) {
-  const stamp = new Date().toISOString().slice(11, 19);
-  const entry = `[${stamp}] ${line}`;
-  domain.logs.push(entry);
-  if (domain.logs.length > 200) domain.logs.splice(0, domain.logs.length - 200);
-  console.log(`[helix ${domain.id.slice(0, 8)}] ${line}`);
+function loadState() {
+  try { return JSON.parse(readFileSync(STATE, "utf8")); }
+  catch { return { tickets: {}, kinds: {} }; }
 }
+let state = loadState();
+function saveState() { writeFileSync(STATE, JSON.stringify(state, null, 2)); }
 
-function qemuAvailable() {
-  return existsSync(QEMU_BIN) || existsSync("/opt/qemu/usr/bin/qemu-system-x86_64");
+async function sh(args) {
+  const { stdout } = await exec(VIRSH, ["-c", URI, ...args], { timeout: 15000 });
+  return stdout.trim();
 }
-
-function kvmPresent() {
-  return existsSync(KVM_DEV);
+async function qemuImg(args) {
+  const { stdout } = await exec(QEMU_IMG, args, { timeout: 30000 });
+  return stdout.trim();
 }
-
-function nestedFlag() {
-  const paths = [
-    "/sys/module/kvm_intel/parameters/nested",
-    "/sys/module/kvm_amd/parameters/nested",
-  ];
-  for (const p of paths) {
-    if (!existsSync(p)) continue;
-    try {
-      return readFileSync(p, "utf8").trim();
-    } catch {
-      /* ignore */
-    }
-  }
-  return "unknown";
+function validId(id) {
+  return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(id);
 }
+function domainName(id) { return `helix-${id}`; }
+function diskPath(id) { return `${DISKS}/${id}.qcow2`; }
 
-function nextDisplay() {
-  const used = new Set([...domains.values()].map((d) => d.display));
-  for (let n = 1; n <= 32; n++) if (!used.has(n)) return n;
-  throw new Error("no free VNC display");
+async function existsDomain(name) {
+  try { await sh(["dominfo", name]); return true; } catch { return false; }
 }
-
-function qemuBin() {
-  if (existsSync(QEMU_BIN)) return QEMU_BIN;
-  return "/opt/qemu/usr/bin/qemu-system-x86_64";
+async function domainState(name) {
+  try { return (await sh(["domstate", name])).trim(); } catch { return "absent"; }
 }
-
-function qemuImg() {
-  if (existsSync(QEMU_IMG)) return QEMU_IMG;
-  return "/opt/qemu/usr/bin/qemu-img";
+async function createDisk(id, sizeGb) {
+  const disk = diskPath(id);
+  if (existsSync(disk)) return disk;
+  if (!existsSync(BASE)) throw new Error("base image missing; install the Helix host bootstrap/base image first");
+  await qemuImg(["create", "-f", "qcow2", "-F", "qcow2", "-b", BASE, disk, `${sizeGb}G`]);
+  return disk;
 }
-
-function qemuEnv() {
-  return {
-    ...process.env,
-    LD_LIBRARY_PATH: `/opt/qemu/usr/lib/x86_64-linux-gnu:/opt/qemu/lib/x86_64-linux-gnu${
-      process.env.LD_LIBRARY_PATH ? `:${process.env.LD_LIBRARY_PATH}` : ""
-    }`,
-  };
+async function defineDomain(id, kind) {
+  const name = domainName(id);
+  const disk = await createDisk(id, kind === "ephemeral" ? 8 : 20);
+  const xml = `<domain type='kvm'>
+  <name>${name}</name>
+  <memory unit='MiB'>${MEMORY_MB}</memory>
+  <currentMemory unit='MiB'>${MEMORY_MB}</currentMemory>
+  <vcpu placement='static'>${VCPUS}</vcpu>
+  <os><type arch='x86_64' machine='pc'>hvm</type><boot dev='hd'/></os>
+  <features><acpi/><apic/></features>
+  <cpu mode='host-passthrough' check='none'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>destroy</on_crash>
+  <devices>
+    <disk type='file' device='disk'><driver name='qemu' type='qcow2' cache='none'/><source file='${disk}'/><target dev='vda' bus='virtio'/></disk>
+    <interface type='network'><source network='${BRIDGE}'/><model type='virtio'/></interface>
+    <graphics type='vnc' listen='127.0.0.1' autoport='yes'/>
+    <video><model type='virtio' heads='1'/></video>
+    <input type='tablet' bus='usb'/>
+    <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
+  </devices>
+</domain>`;
+  const file = `${ROOT}/${name}.xml`;
+  writeFileSync(file, xml);
+  try { await sh(["define", file]); } finally { try { unlinkSync(file); } catch {} }
+  state.kinds[id] = kind;
+  if (!state.tickets[id]) state.tickets[id] = randomBytes(24).toString("base64url");
+  saveState();
+  return name;
 }
-
-async function ensureIso() {
-  try {
-    if (existsSync(ISO) && statSync(ISO).size > 1_000_000) return;
-  } catch {
-    /* download */
-  }
-  const { createWriteStream } = await import("node:fs");
-  const { pipeline } = await import("node:stream/promises");
-  const res = await fetch(ISO_URL);
-  if (!res.ok || !res.body) throw new Error(`ISO download failed ${res.status}`);
-  await pipeline(res.body, createWriteStream(ISO));
+async function startDomain(id, kind) {
+  if (!validId(id)) throw new Error("invalid workspace id");
+  const name = domainName(id);
+  const exists = await existsDomain(name);
+  if (!exists) await defineDomain(id, kind);
+  const s = await domainState(name);
+  if (s !== "running") await sh(["start", name]);
+  return describe(id);
 }
-
-function bootFilesReady() {
-  try {
-    return (
-      existsSync(KERNEL) &&
-      statSync(KERNEL).size > 1_000_000 &&
-      existsSync(INITRD) &&
-      statSync(INITRD).size > 1_000_000
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Pull vmlinuz64 + corepure64.gz out of the ISO so we never sit on isolinux TIMEOUT 600. */
-function extractBootFromIso() {
-  if (bootFilesReady()) return;
-  if (!existsSync(ISO) || statSync(ISO).size < 1_000_000) {
-    throw new Error("TinyCore ISO is missing; cannot extract kernel");
-  }
-  const buf = readFileSync(ISO);
-  const SECTOR = 2048;
-  const pvd = 16 * SECTOR;
-  if (buf.subarray(pvd + 1, pvd + 6).toString("ascii") !== "CD001") {
-    throw new Error("TinyCore image is not ISO9660");
-  }
-  const rootLen = buf[pvd + 156];
-  const root = buf.subarray(pvd + 156, pvd + 156 + rootLen);
-  const extent = root.readUInt32LE(2);
-  const size = root.readUInt32LE(10);
-  const wanted = { VMLINUZ64: KERNEL, "COREPURE64.GZ": INITRD };
-
-  function walk(ext, sz) {
-    let off = ext * SECTOR;
-    const end = off + sz;
-    while (off < end && off < buf.length) {
-      const recLen = buf[off];
-      if (!recLen) {
-        off = (Math.floor(off / SECTOR) + 1) * SECTOR;
-        continue;
-      }
-      const rec = buf.subarray(off, off + recLen);
-      const nameLen = rec[32];
-      const raw = rec
-        .subarray(33, 33 + nameLen)
-        .toString("ascii")
-        .split(";")[0]
-        .replace(/\.+$/, "");
-      const loc = rec.readUInt32LE(2);
-      const dlen = rec.readUInt32LE(10);
-      const flags = rec[25];
-      if (raw === "\u0000" || raw === "\u0001") {
-        off += recLen;
-        continue;
-      }
-      if (flags & 2) walk(loc, dlen);
-      else {
-        const dest = wanted[raw.toUpperCase()];
-        if (dest) writeFileSync(dest, buf.subarray(loc * SECTOR, loc * SECTOR + dlen));
-      }
-      off += recLen;
-    }
-  }
-
-  walk(extent, size);
-  if (!bootFilesReady()) throw new Error("Failed to extract TinyCore kernel/initrd from ISO");
-}
-
-function probeVnc(port) {
-  return new Promise((resolve) => {
-    const sock = createConnection({ host: "127.0.0.1", port });
-    const t = setTimeout(() => {
-      sock.destroy();
-      resolve(false);
-    }, 800);
-    sock.on("connect", () => {
-      sock.once("data", (buf) => {
-        clearTimeout(t);
-        sock.destroy();
-        resolve(buf.toString("ascii").startsWith("RFB"));
-      });
-    });
-    sock.on("error", () => {
-      clearTimeout(t);
-      resolve(false);
-    });
-  });
-}
-
-async function waitVnc(port, attempts = 40) {
-  for (let i = 0; i < attempts; i++) {
-    if (await probeVnc(port)) return true;
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  return false;
-}
-
-function run(bin, args) {
-  return new Promise((resolve, reject) => {
-    execFile(bin, args, { env: qemuEnv() }, (err, stdout, stderr) => {
-      if (err) reject(new Error(stderr || err.message));
-      else resolve(stdout);
-    });
-  });
-}
-
-async function startDomain({ id, kind }) {
-  if (!kvmPresent()) throw new Error("/dev/kvm is not present on this node");
-  if (!qemuAvailable()) throw new Error("qemu-system-x86_64 is not installed on this node");
-  const existing = domains.get(id);
-  if (existing && existing.status === "running" && existing.pid && children.has(existing.pid)) {
-    return existing;
-  }
-  if (existing) await stopDomain(id);
-
-  await ensureIso();
-  extractBootFromIso();
-
-  const persistent = kind !== "ephemeral";
-  const diskGb = persistent ? 8 : 2;
-  const memoryMb = persistent ? 512 : 384;
-  const disk = join(DISKS, `${id}.qcow2`);
-  if (!existsSync(disk)) {
-    await run(qemuImg(), ["create", "-f", "qcow2", disk, `${diskGb}G`]);
-  }
-  const display = nextDisplay();
-  const vncPort = 5900 + display;
-  const ticket = rb(16).toString("hex");
-  /** @type {Domain} */
-  const domain = {
-    id,
-    kind: persistent ? "persistent" : "ephemeral",
-    status: "booting",
-    pid: null,
-    vncPort,
-    display,
-    ticket,
-    logs: [],
-    startedAt: new Date().toISOString(),
-    memoryMb,
-    vcpus: 1,
-    diskGb,
-    guestIp: GUEST_IP,
-    streamPath: `/kasm/ws/${id}`,
-  };
-  domains.set(id, domain);
-  logLine(domain, `nested=${nestedFlag()} kvm=${KVM_DEV}`);
-  logLine(domain, `volume ${disk} (${diskGb}G qcow2, ide)`);
-  logLine(domain, `kernel ${KERNEL} append="${KERNEL_APPEND}"`);
-  logLine(domain, `nic e1000 user-nat ${GUEST_NET} dhcp ${GUEST_IP} (outbound, no tunnel)`);
-  logLine(domain, `qemu ${qemuBin()} -enable-kvm -vnc 127.0.0.1:${display}`);
-
-  const args = [
-    "-enable-kvm",
-    "-cpu",
-    "host",
-    "-machine",
-    "pc,accel=kvm",
-    "-m",
-    String(memoryMb),
-    "-smp",
-    "1",
-    "-kernel",
-    KERNEL,
-    "-initrd",
-    INITRD,
-    "-append",
-    KERNEL_APPEND,
-    "-cdrom",
-    ISO,
-    "-drive",
-    `file=${disk},if=ide,format=qcow2`,
-    "-vga",
-    "std",
-    "-display",
-    "none",
-    "-usb",
-    "-device",
-    "usb-tablet",
-    "-vnc",
-    `127.0.0.1:${display}`,
-    "-netdev",
-    `user,id=n0,net=${GUEST_NET},dhcpstart=${GUEST_IP},hostname=helix`,
-    "-device",
-    "e1000,netdev=n0",
-    "-name",
-    `helix-${id.slice(0, 8)}`,
-    "-no-reboot",
-  ];
-
-  const child = spawn(qemuBin(), args, {
-    env: qemuEnv(),
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  domain.pid = child.pid ?? null;
-  if (domain.pid) children.set(domain.pid, child);
-  child.stdout.on("data", (b) => {
-    for (const line of b.toString().split("\n").filter(Boolean)) logLine(domain, line);
-  });
-  child.stderr.on("data", (b) => {
-    for (const line of b.toString().split("\n").filter(Boolean)) logLine(domain, line);
-  });
-  child.on("exit", (code, signal) => {
-    logLine(domain, `qemu exited code=${code} signal=${signal ?? ""}`);
-    domain.status = "stopped";
-    domain.pid = null;
-    if (kind === "ephemeral") {
-      try {
-        unlinkSync(disk);
-        logLine(domain, `ephemeral volume unlinked`);
-      } catch {
-        /* already gone */
-      }
-    }
-  });
-
-  const ready = await waitVnc(vncPort);
-  if (!ready) {
-    child.kill("SIGKILL");
-    domain.status = "stopped";
-    throw new Error("VNC did not come up — guest failed to bind RFB. Check hypervisor logs.");
-  }
-  domain.status = "running";
-  logLine(domain, `RFB 003.008 on 127.0.0.1:${vncPort} · WebSocket ${domain.streamPath}`);
-  return domain;
-}
-
 async function stopDomain(id) {
-  const domain = domains.get(id);
-  if (!domain) return { ok: true, missing: true };
-  if (domain.pid && children.has(domain.pid)) {
-    const child = children.get(domain.pid);
-    child?.kill("SIGTERM");
-    await new Promise((r) => setTimeout(r, 400));
-    try {
-      if (domain.pid) process.kill(domain.pid, 0);
-      child?.kill("SIGKILL");
-    } catch {
-      /* gone */
-    }
-    children.delete(domain.pid);
-  }
-  domain.status = "stopped";
-  domain.pid = null;
-  if (domain.kind === "ephemeral") {
-    const disk = join(DISKS, `${id}.qcow2`);
-    try {
-      unlinkSync(disk);
-    } catch {
-      /* ignore */
-    }
-  }
-  return { ok: true, kind: domain.kind };
+  const name = domainName(id);
+  if (!(await existsDomain(name))) return { ok: true, missing: true };
+  const s = await domainState(name);
+  if (s === "running") await sh(["shutdown", name]).catch(() => {});
+  return { ok: true, state: await domainState(name) };
 }
-
-function publicDomain(d) {
+async function destroyDomain(id) {
+  const name = domainName(id);
+  if (await existsDomain(name)) {
+    const s = await domainState(name);
+    if (s === "running") await sh(["destroy", name]).catch(() => {});
+    await sh(["undefine", name, "--nvram"]).catch(() => sh(["undefine", name]));
+  }
+  if (state.kinds[id] === "ephemeral") {
+    try { unlinkSync(diskPath(id)); } catch {}
+  }
+  delete state.tickets[id];
+  delete state.kinds[id];
+  saveState();
+  return { ok: true };
+}
+async function describe(id) {
+  const name = domainName(id);
+  if (!(await existsDomain(name))) return null;
+  const stateName = await domainState(name);
+  let display = "";
+  try { display = await sh(["domdisplay", name]); } catch {}
+  const m = display.match(/:(\d+)$/);
+  const displayNumber = m ? Number(m[1]) : null;
   return {
-    id: d.id,
-    kind: d.kind,
-    status: d.status,
-    vncPort: d.vncPort,
-    ticket: d.ticket,
-    logs: d.logs.slice(-40),
-    startedAt: d.startedAt,
-    memoryMb: d.memoryMb,
-    vcpus: d.vcpus,
-    diskGb: d.diskGb,
-    guestIp: d.guestIp,
-    streamPath: d.streamPath,
+    id, kind: state.kinds[id] || "persistent", status: stateName === "running" ? "running" : "stopped",
+    domain: name, display: displayNumber, vnc: display,
+    ticket: state.tickets[id] || null, streamPath: `/kasm/ws/${id}`,
+    memoryMb: MEMORY_MB, vcpus: VCPUS, disk: diskPath(id)
   };
 }
-
 async function capabilities() {
-  let qemuVersion = null;
-  if (qemuAvailable()) {
-    try {
-      qemuVersion = String(await run(qemuBin(), ["--version"])).split("\n")[0];
-    } catch {
-      qemuVersion = "installed";
-    }
+  let kvm = false, nested = "unknown", libvirt = false;
+  try { kvm = existsSync("/dev/kvm"); await sh(["version"]); libvirt = true; } catch {}
+  for (const p of ["/sys/module/kvm_intel/parameters/nested","/sys/module/kvm_amd/parameters/nested"]) {
+    if (existsSync(p)) { try { nested = readFileSync(p,"utf8").trim(); } catch {} }
   }
-  return {
-    hostname: osHostname(),
-    kvm: kvmPresent(),
-    nested: nestedFlag(),
-    qemu: qemuAvailable(),
-    qemuVersion,
-    iso: existsSync(ISO),
-    kernel: bootFilesReady(),
-    guests: [...domains.values()].filter((d) => d.status === "running").length,
-    node: "hypervisor-node-local",
-    region: process.env.HELIX_REGION || "local-nested-kvm",
-    guestNet: GUEST_NET,
-    guestIp: GUEST_IP,
-    nic: "e1000 user-nat",
-    guestOs: "TinyCorePure64-15.0",
-  };
+  return { hostname: requireHost(), kvm, nested, libvirt, qemuSystem: existsSync("/usr/bin/qemu-system-x86_64"), uri: URI, network: BRIDGE };
+}
+function requireHost() { return process.env.HOSTNAME || "helix-hypervisor"; }
+async function domains() {
+  let names = [];
+  try { names = (await sh(["list","--name"])).split("\n").map(x=>x.trim()).filter(Boolean); } catch {}
+  const out=[];
+  for (const name of names.filter(n=>n.startsWith("helix-"))) {
+    const id=name.slice(6); const d=await describe(id); if(d) out.push(d);
+  }
+  return out;
+}
+function json(res, code, body) {
+  const data=JSON.stringify(body); res.writeHead(code, {"content-type":"application/json","content-length":Buffer.byteLength(data)}); res.end(data);
+}
+function body(req) {
+  return new Promise((resolve,reject)=>{ const c=[]; req.on("data",x=>c.push(x)); req.on("end",()=>{try{resolve(c.length?JSON.parse(Buffer.concat(c)):{});}catch(e){reject(e);}}); req.on("error",reject); });
 }
 
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => {
-      if (!chunks.length) return resolve({});
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-      } catch (e) {
-        reject(e);
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
-function send(res, status, body) {
-  const data = JSON.stringify(body);
-  res.writeHead(status, {
-    "content-type": "application/json",
-    "content-length": Buffer.byteLength(data),
-  });
-  res.end(data);
-}
-
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
+const server=createServer(async(req,res)=>{
+  const url=new URL(req.url||"/",`http://${HOST}:${PORT}`);
   try {
-    if (req.method === "GET" && url.pathname === "/health") {
-      send(res, 200, { ok: true });
-      return;
+    if(req.method==="GET" && url.pathname==="/health") return json(res,200,{ok:true});
+    if(req.method==="GET" && url.pathname==="/capabilities") return json(res,200,await capabilities());
+    if(req.method==="GET" && url.pathname==="/domains") return json(res,200,await domains());
+    const m=url.pathname.match(/^\/domains\/([^/]+)$/);
+    if(m && req.method==="GET") { const d=await describe(m[1]); return d?json(res,200,d):json(res,404,{error:"not found"}); }
+    if(m && req.method==="DELETE") return json(res,200,await destroyDomain(m[1]));
+    if(req.method==="POST" && url.pathname==="/domains") {
+      const b=await body(req); if(!b.id) return json(res,400,{error:"id required"});
+      return json(res,200,await startDomain(String(b.id),b.kind==="ephemeral"?"ephemeral":"persistent"));
     }
-    if (req.method === "GET" && url.pathname === "/capabilities") {
-      send(res, 200, await capabilities());
-      return;
+    if(req.method==="POST" && url.pathname.endsWith("/stop")) {
+      const id=url.pathname.split("/")[2]; return json(res,200,await stopDomain(id));
     }
-    if (req.method === "GET" && url.pathname === "/domains") {
-      send(res, 200, [...domains.values()].map(publicDomain));
-      return;
-    }
-    const one = url.pathname.match(/^\/domains\/([^/]+)$/);
-    if (req.method === "GET" && one) {
-      const d = domains.get(one[1]);
-      if (!d) return send(res, 404, { error: "not found" });
-      return send(res, 200, publicDomain(d));
-    }
-    if (req.method === "DELETE" && one) {
-      await stopDomain(one[1]);
-      return send(res, 200, { ok: true });
-    }
-    if (req.method === "POST" && url.pathname === "/domains") {
-      const body = await readJson(req);
-      if (!body?.id) return send(res, 400, { error: "id required" });
-      const d = await startDomain({
-        id: String(body.id),
-        kind: body.kind === "ephemeral" ? "ephemeral" : "persistent",
-      });
-      return send(res, 200, publicDomain(d));
-    }
-    send(res, 404, { error: "not found" });
-  } catch (err) {
-    send(res, 500, { error: err instanceof Error ? err.message : "hypervisor error" });
-  }
+    return json(res,404,{error:"not found"});
+  } catch(e) { return json(res,500,{error:e?.message||"hypervisor error"}); }
 });
 
-const wss = new WebSocketServer({ noServer: true });
-
-server.on("upgrade", (req, socket, head) => {
-  const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
-  const m = url.pathname.match(/^\/kasm\/ws\/([^/]+)$/);
-  if (!m) {
-    socket.destroy();
-    return;
-  }
-  const domain = domains.get(m[1]);
-  const ticket = url.searchParams.get("ticket");
-  if (!domain || domain.status !== "running" || !ticket || ticket !== domain.ticket) {
-    socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
-    socket.destroy();
-    return;
-  }
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    const tcp = createConnection({ host: "127.0.0.1", port: domain.vncPort });
-    tcp.on("error", () => ws.close());
-    ws.on("error", () => tcp.destroy());
-    tcp.on("data", (data) => {
-      if (ws.readyState === ws.OPEN) ws.send(data);
+const wss=new WebSocketServer({noServer:true});
+server.on("upgrade",(req,socket,head)=>{
+  const url=new URL(req.url||"/",`http://${HOST}:${PORT}`);
+  const m=url.pathname.match(/^\/kasm\/ws\/([^/]+)$/);
+  if(!m){socket.destroy();return;}
+  const id=m[1], ticket=url.searchParams.get("ticket"), expected=state.tickets[id];
+  if(!ticket || ticket!==expected){socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");socket.destroy();return;}
+  void describe(id).then(d=>{
+    if(!d || d.status!=="running" || !d.vnc){socket.destroy();return;}
+    wss.handleUpgrade(req,socket,head,ws=>{
+      const port=5900+(d.display||0);
+      const tcp=createConnection({host:"127.0.0.1",port});
+      const close=()=>{try{tcp.destroy();}catch{} try{if(ws.readyState===ws.OPEN)ws.close();}catch{}};
+      tcp.on("data",x=>{if(ws.readyState===ws.OPEN)ws.send(x);});
+      ws.on("message",x=>{if(!tcp.destroyed)tcp.write(x);});
+      tcp.on("error",close); tcp.on("close",close); ws.on("close",close); ws.on("error",()=>tcp.destroy());
     });
-    ws.on("message", (data) => {
-      if (!tcp.destroyed) tcp.write(data);
-    });
-    const close = () => {
-      try {
-        tcp.destroy();
-      } catch {
-        /* ignore */
-      }
-      try {
-        ws.close();
-      } catch {
-        /* ignore */
-      }
-    };
-    ws.on("close", close);
-    tcp.on("close", close);
-  });
+  }).catch(()=>socket.destroy());
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(
-    `[helix-hypervisor] nested=${nestedFlag()} kvm=${kvmPresent()} qemu=${qemuAvailable()} kernel=${bootFilesReady()} :${PORT}`,
-  );
-});
-
-function shutdown() {
-  for (const id of [...domains.keys()]) {
-    void stopDomain(id);
-  }
-  setTimeout(() => process.exit(0), 800);
-}
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+server.listen(PORT,HOST,()=>console.log(`[helix-libvirt] ${HOST}:${PORT} kvm=${existsSync("/dev/kvm")}`));
