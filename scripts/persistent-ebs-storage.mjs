@@ -138,7 +138,7 @@ async function realpath(path) {
 export async function attachPersistentWorkspace(workspaceId, baseImage, qemuImg) {
   const v = await ensureVolume(workspaceId);
   if (!v.initialized) {
-    await exec(qemuImg, ["convert", "-p", "-O", "raw", baseImage, v.device], { timeout: 15 * 60 * 1000 });
+    await exec(qemuImg, ["convert", "-p", "-m", "1", "-W", "-O", "raw", baseImage, v.device], { timeout: 15 * 60 * 1000 });
     await client.send(new CreateTagsCommand({
       Resources: [v.volumeId],
       Tags: [{ Key: "StorageInitialized", Value: "true" }],
