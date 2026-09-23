@@ -1,0 +1,16 @@
+[Unit]
+Description=Helix XFCE session
+After=helix-desktop.service
+Requires=helix-desktop.service
+
+[Service]
+Type=simple
+User=root
+Environment=DISPLAY=:99
+Environment=HOME=/root
+ExecStart=/bin/bash -lc 'dbus-run-session -- xfce4-session'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
