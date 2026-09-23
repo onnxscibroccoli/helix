@@ -35,7 +35,6 @@ def volume_for(workspace_id):
     response = ec2.describe_volumes(
         Filters=[
             {"Name": "tag:Project", "Values": ["Helix"]},
-            {"Name": "tag:ManagedBy", "Values": ["helix-ebs-agent"]},
             {"Name": "tag:WorkspaceId", "Values": [workspace_id]},
             {"Name": "status", "Values": ["available", "in-use"]},
         ]
