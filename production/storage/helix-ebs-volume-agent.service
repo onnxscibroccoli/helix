@@ -20,7 +20,7 @@ RestartSec=3
 NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/helix/ebs
+ReadWritePaths=/var/lib/helix
 
 [Install]
 WantedBy=multi-user.target
