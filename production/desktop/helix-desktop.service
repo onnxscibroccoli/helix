@@ -1,0 +1,16 @@
+[Unit]
+Description=Helix XFCE virtual desktop
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Environment=DISPLAY=:99
+Environment=HOME=/root
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1920x1080x24 -ac
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
