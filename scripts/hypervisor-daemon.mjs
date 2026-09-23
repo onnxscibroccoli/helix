@@ -76,7 +76,8 @@ async function domainState(name) {
   try { return (await sh(["domstate", name])).trim(); } catch { return "absent"; }
 }
 async function createDisk(id, sizeGb, persistentMount = null) {
-  const disk = diskPath(id);
+  const disk = persistentMount ? `${persistentMount}/disk.qcow2` : diskPath(id);
+  mkdirSync(persistentMount || DISKS, { recursive: true });
   if (existsSync(disk)) return disk;
   if (!existsSync(BASE)) throw new Error("base image missing; install the Helix host bootstrap/base image first");
   await qemuImg(["create", "-f", "qcow2", "-F", "qcow2", "-b", BASE, disk, `${sizeGb}G`]);
@@ -165,7 +166,7 @@ async function describe(id) {
     id, kind: state.kinds[id] || "persistent", status: stateName === "running" ? "running" : "stopped",
     domain: name, display: displayNumber, vnc: display,
     ticket: state.tickets[id] || null, streamPath: `/kasm/ws/${id}`,
-    memoryMb: MEMORY_MB, vcpus: VCPUS, disk, storage: storage || null
+    memoryMb: MEMORY_MB, vcpus: VCPUS, disk, storage: state.storage[id] || null
   };
 }
 async function capabilities() {
