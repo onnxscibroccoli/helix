@@ -42,6 +42,7 @@ function loadState() {
   catch { return { tickets: {}, kinds: {} }; }
 }
 let state = loadState();
+state.storage ||= {};
 function saveState() { writeFileSync(STATE, JSON.stringify(state, null, 2)); }
 
 async function sh(args) {
@@ -108,6 +109,7 @@ async function defineDomain(id, kind) {
   writeFileSync(file, xml);
   try { await sh(["define", file]); } finally { try { unlinkSync(file); } catch {} }
   state.kinds[id] = kind;
+  if (storage) state.storage[id] = storage;
   if (!state.tickets[id]) state.tickets[id] = randomBytes(24).toString("base64url");
   saveState();
   return name;
@@ -145,6 +147,7 @@ async function destroyDomain(id) {
     });
   }
   delete state.tickets[id];
+  delete state.storage[id];
   delete state.kinds[id];
   saveState();
   return { ok: true };
@@ -157,6 +160,7 @@ async function describe(id) {
   try { display = await sh(["domdisplay", name]); } catch {}
   const m = display.match(/:(\d+)$/);
   const displayNumber = m ? Number(m[1]) : null;
+  const disk = state.storage[id]?.mountPath ? `${state.storage[id].mountPath}/disk.qcow2` : diskPath(id);
   return {
     id, kind: state.kinds[id] || "persistent", status: stateName === "running" ? "running" : "stopped",
     domain: name, display: displayNumber, vnc: display,
