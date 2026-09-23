@@ -1,0 +1,34 @@
+name: AWS rebuild validation
+
+on:
+  push:
+    paths:
+      - "infra/aws/**"
+      - "production/desktop/**"
+      - ".github/workflows/aws-rebuild-validation.yml"
+  pull_request:
+    paths:
+      - "infra/aws/**"
+      - "production/desktop/**"
+      - ".github/workflows/aws-rebuild-validation.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform format
+        working-directory: infra/aws
+        run: terraform fmt -check -recursive
+      - name: Terraform init
+        working-directory: infra/aws
+        run: terraform init -backend=false
+      - name: Terraform validate
+        working-directory: infra/aws
+        run: terraform validate
+      - name: Shell syntax
+        run: |
+          bash -n infra/aws/user-data.sh
+          bash -n production/desktop/helix-kvm-bootstrap.sh
+          bash -n production/desktop/helix-rdc-bootstrap.sh
