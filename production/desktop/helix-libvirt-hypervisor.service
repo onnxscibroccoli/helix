@@ -12,6 +12,8 @@ Environment=HYPERVISOR_PORT=8090
 Environment=HELIX_DISKS=/var/lib/libvirt/images/helix-workspaces
 Environment=HELIX_BASE_IMAGE=/var/lib/libvirt/images/helix-dev/debian-13-generic-amd64.qcow2
 Environment=HELIX_LIBVIRT_NETWORK=default
+Environment=HELIX_STORAGE_AGENT_URL=http://127.0.0.1:8091
+EnvironmentFile=-/etc/helix/ebs-agent-client.env
 Environment=HELIX_VM_MEMORY_MB=768
 Environment=HELIX_VM_VCPUS=1
 ExecStart=/usr/bin/node /opt/helix/scripts/hypervisor-daemon.mjs
