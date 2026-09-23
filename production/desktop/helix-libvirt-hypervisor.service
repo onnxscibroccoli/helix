@@ -1,8 +1,8 @@
 [Unit]
 Description=Helix libvirt workspace reconciler
-After=network-online.target libvirtd.service
+After=network-online.target libvirtd.service helix-ebs-volume-agent.service
 Wants=network-online.target
-Requires=libvirtd.service
+Requires=libvirtd.service helix-ebs-volume-agent.service
 
 [Service]
 Type=simple
