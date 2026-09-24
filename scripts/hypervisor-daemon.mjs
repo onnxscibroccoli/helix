@@ -220,15 +220,16 @@ const server=createServer(async(req,res)=>{
     if(req.method==="GET" && url.pathname==="/health") return json(res,200,{ok:true});
     if(req.method==="GET" && url.pathname==="/capabilities") return json(res,200,await capabilities());
     if(req.method==="GET" && url.pathname==="/domains") return json(res,200,await domains());
-    const m=url.pathname.match(/^\/domains\/([^/]+)(?:\/password)?$/);
-    if(m && req.method==="POST" && url.pathname.endsWith("/password")) {
+    const pm=url.pathname.match(/^\/domains\/([^/]+)\/password$/);
+    if(pm && req.method==="POST") {
       const b=await body(req);
       const username=String(b.username||"");
       const password=String(b.password||"");
       if(!["root","kali"].includes(username) || password.length<12 || password.length>128 || /[\u0000-\u001f\u007f]/.test(password))
         return json(res,400,{error:"invalid password"});
-      return json(res,200,await setGuestPassword(m[1],username,password));
+      return json(res,200,await setGuestPassword(pm[1],username,password));
     }
+    const m=url.pathname.match(/^\/domains\/([^/]+)$/);
     if(m && req.method==="GET") { const d=await describe(m[1]); return d?json(res,200,d):json(res,404,{error:"not found"}); }
     if(m && req.method==="DELETE") return json(res,200,await destroyDomain(m[1]));
     if(req.method==="POST" && url.pathname==="/domains") {
