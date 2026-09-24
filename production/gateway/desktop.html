@@ -12,7 +12,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07090d;col
 button,a{min-height:38px;border:1px solid #2a3442;border-radius:10px;background:#111722;color:#eef2f7;padding:8px 11px;text-decoration:none;font:inherit;touch-action:manipulation}
 button:active,a:active{background:#1b2634}
 #status{margin-right:auto;color:#a9b5c4;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:90px}
-#ime{position:fixed;z-index:30;left:50%;bottom:64px;width:2px;height:2px;opacity:.01;border:0;padding:0;background:transparent;color:transparent;caret-color:transparent;transform:translateX(-50%)}
+#ime{position:fixed;z-index:30;left:50%;bottom:64px;width:4px;height:4px;opacity:.02;border:0;padding:0;background:transparent;color:transparent;caret-color:transparent;transform:translateX(-50%)}
 #ime:focus{outline:none}
 #keyboardHelp{display:none;position:fixed;z-index:25;left:8px;right:8px;bottom:64px;padding:8px 10px;border:1px solid #334052;border-radius:10px;background:#0b0f16ee;color:#c9d2de;font-size:12px;text-align:center}
 @media(min-width:800px){#screen{inset:0}#bar{top:10px;bottom:auto;left:10px;right:auto;border:1px solid #26303c;border-radius:12px;min-height:0;padding:6px;background:#0b0f16cc}.mobileOnly{display:none}#ime{bottom:18px}}
@@ -21,7 +21,7 @@ button:active,a:active{background:#1b2634}
 <body>
 <div id="screen"></div>
 <textarea id="ime" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" tabindex="0" aria-label="Remote keyboard input"></textarea>
-<div id="keyboardHelp">Android keyboard is active — type into Kali, then press Enter on your phone keyboard.</div>
+<div id="keyboardHelp">Android keyboard is active — type into Kali. Enter sends Enter; Backspace deletes.</div>
 <div id="bar">
 <span id="status">Connecting to Kali…</span>
 <button id="keyboard" class="mobileOnly">⌨ Keyboard</button>
@@ -34,27 +34,93 @@ button:active,a:active{background:#1b2634}
 <script type="module">
 import RFB from '/novnc/core/rfb.js';
 import Keyboard from '/novnc/core/input/keyboard.js';
+import KeyTable from '/novnc/core/input/keysym.js';
 const id=__WORKSPACE_ID__;
 let rfb=null;
-let mobileKeyboard=null;
+let desktopKeyboard=null;
+let mobileKeyboard=false;
+let imeValue='';
 const status=document.getElementById('status');
 const screen=document.getElementById('screen');
 const ime=document.getElementById('ime');
 const help=document.getElementById('keyboardHelp');
 
-function ensureMobileKeyboard(){
-  if(mobileKeyboard) return;
-  mobileKeyboard=new Keyboard(ime);
-  mobileKeyboard.onkeyevent=(keysym,code,down)=>{if(rfb) rfb.sendKey(keysym,code,down)};
-  mobileKeyboard.grab();
+const isMobile=matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+function sendTap(keysym, code=null){
+  if(!rfb) return;
+  rfb.sendKey(keysym,code,true);
+  rfb.sendKey(keysym,code,false);
 }
-function showKeyboard(){
-  ensureMobileKeyboard();
-  if(rfb) rfb.blur();
+function sendText(text){
+  if(!rfb || !text) return;
+  for(const ch of [...text]){
+    const cp=ch.codePointAt(0);
+    let keysym=cp;
+    if(cp>0x7f) keysym=0x01000000|cp;
+    rfb.sendKey(keysym,null,true);
+    rfb.sendKey(keysym,null,false);
+  }
+}
+function sendMobileSpecial(e){
+  if(!rfb) return;
+  const code=e.code;
+  const key=e.key;
+  if(code==='Enter' || key==='Enter'){
+    e.preventDefault(); sendTap(KeyTable.XK_Return,'Enter'); ime.value=''; imeValue=''; return true;
+  }
+  if(code==='Backspace' || key==='Backspace'){
+    e.preventDefault(); sendTap(KeyTable.XK_BackSpace,'Backspace'); ime.value=''; imeValue=''; return true;
+  }
+  if(code==='Tab' || key==='Tab'){
+    e.preventDefault(); sendTap(KeyTable.XK_Tab,'Tab'); ime.value=''; imeValue=''; return true;
+  }
+  if(code==='Escape' || key==='Escape'){
+    e.preventDefault(); sendTap(KeyTable.XK_Escape,'Escape'); ime.value=''; imeValue=''; return true;
+  }
+  if(code==='ArrowLeft') {e.preventDefault();sendTap(KeyTable.XK_Left,'ArrowLeft');return true}
+  if(code==='ArrowRight'){e.preventDefault();sendTap(KeyTable.XK_Right,'ArrowRight');return true}
+  if(code==='ArrowUp')   {e.preventDefault();sendTap(KeyTable.XK_Up,'ArrowUp');return true}
+  if(code==='ArrowDown') {e.preventDefault();sendTap(KeyTable.XK_Down,'ArrowDown');return true}
+  return false;
+}
+function enableMobileInput(){
+  mobileKeyboard=true;
+  imeValue='';
+  ime.value='';
   ime.focus({preventScroll:true});
-  help.style.display='block';
   status.textContent='Android keyboard active';
+  help.style.display='block';
   setTimeout(()=>{help.style.display='none'},2200);
+}
+function disableMobileInput(){
+  mobileKeyboard=false;
+  try{ime.blur()}catch{}
+}
+function setupKeyboard(){
+  if(isMobile){
+    ime.addEventListener('input',e=>{
+      if(!mobileKeyboard || !rfb) return;
+      const value=ime.value;
+      if(value) sendText(value);
+      ime.value='';
+      imeValue='';
+    });
+    ime.addEventListener('keydown',e=>{
+      if(!mobileKeyboard) return;
+      if(e.keyCode===229 || e.isComposing) return;
+      sendMobileSpecial(e);
+    });
+    ime.addEventListener('compositionend',e=>{
+      if(!mobileKeyboard || !rfb) return;
+      const value=ime.value;
+      if(value){sendText(value);ime.value='';imeValue='';}
+    });
+  }else{
+    desktopKeyboard=new Keyboard(screen);
+    desktopKeyboard.onkeyevent=(keysym,code,down)=>{if(rfb) rfb.sendKey(keysym,code,down)};
+    desktopKeyboard.grab();
+  }
 }
 async function paste(){
   try{
@@ -77,27 +143,31 @@ function connect(){
     rfb.scaleViewport=true;
     rfb.resizeSession=false;
     rfb.clipViewport=false;
-    rfb.focusOnClick=true;
+    rfb.focusOnClick=!isMobile;
     rfb.viewOnly=false;
-    rfb.addEventListener('connect',()=>{status.textContent='Kali Rolling · connected';ensureMobileKeyboard()});
+    rfb.addEventListener('connect',()=>{
+      status.textContent='Kali Rolling · connected';
+      setupKeyboard();
+      if(isMobile) enableMobileInput();
+    });
     rfb.addEventListener('disconnect',()=>status.textContent='Desktop disconnected');
     rfb.addEventListener('securityfailure',()=>status.textContent='Desktop security handshake failed');
   }).catch(e=>status.textContent=e.message||'Connection failed');
 }
 
-document.getElementById('keyboard').onclick=showKeyboard;
+document.getElementById('keyboard').onclick=enableMobileInput;
 document.getElementById('paste').onclick=paste;
 document.getElementById('cad').onclick=()=>rfb?.sendCtrlAltDel();
 document.getElementById('fs').onclick=()=>document.documentElement.requestFullscreen?.();
 document.getElementById('reconnect').onclick=connect;
-screen.addEventListener('click',()=>rfb?.focus());
-screen.addEventListener('touchstart',()=>rfb?.focus(),{passive:true});
+screen.addEventListener('click',()=>{if(!isMobile) rfb?.focus()});
+screen.addEventListener('touchstart',()=>{if(!isMobile) rfb?.focus()},{passive:true});
 
 if('modelContext' in document){try{document.modelContext.registerTool({
   name:'focus_omnikali_keyboard',
   description:'Focus the mobile browser keyboard so text and Enter can be sent to the authenticated OmniKali desktop.',
   inputSchema:{type:'object',properties:{},additionalProperties:false},
-  execute:async()=>{showKeyboard();return{status:'ready'}}
+  execute:async()=>{enableMobileInput();return{status:'ready'}}
 })}catch{}}
 
 connect();
