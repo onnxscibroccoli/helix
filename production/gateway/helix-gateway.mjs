@@ -133,12 +133,16 @@ const server=createServer(async (req,res)=>{
     }
     if(req.method==="GET" && u.pathname==="/auth/login") return login(req,res,u);
     if(req.method==="GET" && u.pathname==="/auth/start") return startLogin(req,res,u);
-    if(req.method==="GET" && u.pathname==="/auth/forgot") return forgotCloudPassword(req,res);
+    if(req.method==="GET" && u.pathname==="/auth/forgot") return forgotCloudPassword(req,res);\n    if(req.method==="GET" && u.pathname==="/setup/kali-password") return kaliPasswordPage(req,res);
     if(req.method==="GET" && u.pathname==="/auth/kali-password") return kaliPasswordPage(req,res);
     if(req.method==="GET" && u.pathname.startsWith("/novnc/")) return serveNoVnc(req,res,u);
     if(req.method==="GET" && u.pathname==="/auth/callback") return callback(req,res,u);
     if(req.method==="GET" && u.pathname==="/auth/logout") {
-      res.writeHead(302,{location:"/", "set-cookie":clearCookie(COOKIE)});
+      const managed = process.env.OIDC_MANAGED_DOMAIN || "";
+      const logout = managed
+        ? `https://${managed}/logout?${new URLSearchParams({client_id:CLIENT_ID,logout_uri:PUBLIC_ORIGIN+"/"}).toString()}`
+        : "/";
+      res.writeHead(302,{location:logout, "set-cookie":clearCookie(COOKIE), "cache-control":"no-store"});
       return res.end();
     }
     if(req.method==="GET" && u.pathname==="/api/v1/workspaces") return workspaceList(req,res);
