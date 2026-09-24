@@ -220,7 +220,7 @@ const server=createServer(async(req,res)=>{
     if(req.method==="GET" && url.pathname==="/health") return json(res,200,{ok:true});
     if(req.method==="GET" && url.pathname==="/capabilities") return json(res,200,await capabilities());
     if(req.method==="GET" && url.pathname==="/domains") return json(res,200,await domains());
-    const m=url.pathname.match(/^\/domains\/([^/]+)$/);
+    const m=url.pathname.match(/^\/domains\/([^/]+)(?:\/password)?$/);
     if(m && req.method==="POST" && url.pathname.endsWith("/password")) {
       const b=await body(req);
       const username=String(b.username||"");
