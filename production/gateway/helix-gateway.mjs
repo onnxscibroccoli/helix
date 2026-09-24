@@ -90,12 +90,12 @@ async function setKaliPassword(req,res,id){
   if(id!=="omnikali") return json(res,404,{error:"workspace not found"});
   const origin=req.headers.origin||"";
   if(origin && origin!==PUBLIC_ORIGIN) return json(res,403,{error:"origin not allowed"});
-  const b=await requestBody(req), password=String(b.password||"");
+  const b=await requestBody(req), username=String(b.username||"root"), password=String(b.password||"");
   if(password.length<12||password.length>128||/[\u0000-\u001f\u007f]/.test(password)) return json(res,400,{error:"password must be 12-128 characters"});
   const d=await hv("/domains/"+encodeURIComponent(id));
   if(d.status!==200) return json(res,404,{error:"workspace not found"});
   if(d.body.owner && d.body.owner!==s.sub) return json(res,403,{error:"workspace not authorized"});
-  const r=await hv("/domains/"+encodeURIComponent(id)+"/password",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({username:"kali",password})});
+  const r=await hv("/domains/"+encodeURIComponent(id)+"/password",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({username,password})});
   return json(res,r.status,r.body);
 }
 async function workspaceList(req,res){
