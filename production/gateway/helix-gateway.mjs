@@ -133,7 +133,8 @@ const server=createServer(async (req,res)=>{
     }
     if(req.method==="GET" && u.pathname==="/auth/login") return login(req,res,u);
     if(req.method==="GET" && u.pathname==="/auth/start") return startLogin(req,res,u);
-    if(req.method==="GET" && u.pathname==="/auth/forgot") return forgotCloudPassword(req,res);\n    if(req.method==="GET" && u.pathname==="/setup/kali-password") return kaliPasswordPage(req,res);
+    if(req.method==="GET" && u.pathname==="/auth/forgot") return forgotCloudPassword(req,res);
+    if(req.method==="GET" && u.pathname==="/setup/kali-password") return kaliPasswordPage(req,res);
     if(req.method==="GET" && u.pathname==="/auth/kali-password") return kaliPasswordPage(req,res);
     if(req.method==="GET" && u.pathname.startsWith("/novnc/")) return serveNoVnc(req,res,u);
     if(req.method==="GET" && u.pathname==="/auth/callback") return callback(req,res,u);
