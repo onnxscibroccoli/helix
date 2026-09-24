@@ -59,7 +59,7 @@ async function qga(name,payload){
   return JSON.parse(stdout.trim());
 }
 async function setGuestPassword(id,username,password){
-  if(username!=="kali") throw new Error("only the Kali desktop user can be changed");
+  if(!["root","kali"].includes(username)) throw new Error("only root or the Kali desktop user can be changed");
   const name=domainName(id);
   if(!(await existsDomain(name))) throw new Error("workspace not found");
   if((await domainState(name))!=="running") throw new Error("workspace is not running");
