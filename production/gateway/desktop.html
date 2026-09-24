@@ -1,2 +1,106 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#07090d"><title>OmniKali Desktop</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07090d;color:#eef2f7;font:14px system-ui}#screen{position:fixed;inset:0 0 48px;background:#090b10}#bar{position:fixed;z-index:10;left:0;right:0;bottom:0;height:48px;padding:6px max(8px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-bottom));display:flex;align-items:center;gap:7px;background:#0b0f16ee;border-top:1px solid #26303c;backdrop-filter:blur(12px)}button,a{min-height:36px;border:1px solid #2a3442;border-radius:9px;background:#111722;color:#eef2f7;padding:8px 11px;text-decoration:none;font:inherit}button:active,a:active{background:#1b2634}#status{margin-right:auto;color:#a9b5c4;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kbd{display:none}@media(min-width:800px){#screen{inset:0}.kbd{display:inline}#bar{top:10px;bottom:auto;left:10px;right:auto;border:1px solid #26303c;border-radius:12px;height:auto;padding:6px;background:#0b0f16cc}.wide{display:inline}}</style></head><body><div id="screen"></div><div id="bar"><span id="status">Connecting to Kali…</span><button id="cad" class="kbd">Ctrl-Alt-Del</button><button id="fs">Fullscreen</button><button id="reconnect">Reconnect</button><a href="/">Console</a></div><script type="module">import RFB from '/novnc/core/rfb.js';const id=__WORKSPACE_ID__;let rfb=null;const status=document.getElementById('status');const screen=document.getElementById('screen');function connect(){if(rfb){try{rfb.disconnect()}catch{}}status.textContent='Requesting desktop ticket…';fetch('/api/v1/workspaces/'+encodeURIComponent(id),{cache:'no-store'}).then(async r=>{if(r.status===401){location.href='/auth/login';return null}if(!r.ok)throw Error('workspace unavailable');return r.json()}).then(x=>{if(!x)return;if(x.status!=='running'){status.textContent='Starting Kali…';setTimeout(connect,1200);return}const scheme=location.protocol==='https:'?'wss':'ws';rfb=new RFB(screen,scheme+'://'+location.host+x.streamPath+'?ticket='+encodeURIComponent(x.ticket));rfb.scaleViewport=true;rfb.resizeSession=false;rfb.clipViewport=false;rfb.focusOnClick=true;rfb.viewOnly=false;rfb.addEventListener('connect',()=>status.textContent='Kali Rolling · connected');rfb.addEventListener('disconnect',()=>status.textContent='Desktop disconnected');rfb.addEventListener('securityfailure',()=>status.textContent='Desktop security handshake failed')}).catch(e=>status.textContent=e.message||'Connection failed')}document.getElementById('cad').onclick=()=>rfb?.sendCtrlAltDel();document.getElementById('fs').onclick=()=>document.documentElement.requestFullscreen?.();document.getElementById('reconnect').onclick=connect;screen.onclick=()=>rfb?.focus();connect();</script></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<title>OmniKali Desktop</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07090d;color:#eef2f7;font:14px system-ui}
+#screen{position:fixed;inset:0 0 56px;background:#090b10}
+#bar{position:fixed;z-index:20;left:0;right:0;bottom:0;min-height:48px;padding:6px max(8px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-bottom));display:flex;align-items:center;gap:7px;background:#0b0f16ee;border-top:1px solid #26303c;backdrop-filter:blur(12px)}
+button,a{min-height:38px;border:1px solid #2a3442;border-radius:10px;background:#111722;color:#eef2f7;padding:8px 11px;text-decoration:none;font:inherit;touch-action:manipulation}
+button:active,a:active{background:#1b2634}
+#status{margin-right:auto;color:#a9b5c4;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:90px}
+#ime{position:fixed;z-index:30;left:50%;bottom:64px;width:2px;height:2px;opacity:.01;border:0;padding:0;background:transparent;color:transparent;caret-color:transparent;transform:translateX(-50%)}
+#ime:focus{outline:none}
+#keyboardHelp{display:none;position:fixed;z-index:25;left:8px;right:8px;bottom:64px;padding:8px 10px;border:1px solid #334052;border-radius:10px;background:#0b0f16ee;color:#c9d2de;font-size:12px;text-align:center}
+@media(min-width:800px){#screen{inset:0}#bar{top:10px;bottom:auto;left:10px;right:auto;border:1px solid #26303c;border-radius:12px;min-height:0;padding:6px;background:#0b0f16cc}.mobileOnly{display:none}#ime{bottom:18px}}
+</style>
+</head>
+<body>
+<div id="screen"></div>
+<textarea id="ime" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" tabindex="0" aria-label="Remote keyboard input"></textarea>
+<div id="keyboardHelp">Android keyboard is active — type into Kali, then press Enter on your phone keyboard.</div>
+<div id="bar">
+<span id="status">Connecting to Kali…</span>
+<button id="keyboard" class="mobileOnly">⌨ Keyboard</button>
+<button id="paste">Paste</button>
+<button id="cad">Ctrl-Alt-Del</button>
+<button id="fs">Fullscreen</button>
+<button id="reconnect">Reconnect</button>
+<a href="/">Console</a>
+</div>
+<script type="module">
+import RFB from '/novnc/core/rfb.js';
+import Keyboard from '/novnc/core/input/keyboard.js';
+const id=__WORKSPACE_ID__;
+let rfb=null;
+let mobileKeyboard=null;
+const status=document.getElementById('status');
+const screen=document.getElementById('screen');
+const ime=document.getElementById('ime');
+const help=document.getElementById('keyboardHelp');
+
+function ensureMobileKeyboard(){
+  if(mobileKeyboard) return;
+  mobileKeyboard=new Keyboard(ime);
+  mobileKeyboard.onkeyevent=(keysym,code,down)=>{if(rfb) rfb.sendKey(keysym,code,down)};
+  mobileKeyboard.grab();
+}
+function showKeyboard(){
+  ensureMobileKeyboard();
+  if(rfb) rfb.blur();
+  ime.focus({preventScroll:true});
+  help.style.display='block';
+  status.textContent='Android keyboard active';
+  setTimeout(()=>{help.style.display='none'},2200);
+}
+async function paste(){
+  try{
+    const text=await navigator.clipboard.readText();
+    if(text && rfb){rfb.clipboardPasteFrom(text);status.textContent='Pasted into Kali';}
+  }catch{status.textContent='Clipboard permission denied';}
+}
+function connect(){
+  if(rfb){try{rfb.disconnect()}catch{}}
+  status.textContent='Requesting desktop ticket…';
+  fetch('/api/v1/workspaces/'+encodeURIComponent(id),{cache:'no-store'}).then(async r=>{
+    if(r.status===401){location.href='/auth/login';return null}
+    if(!r.ok)throw Error('workspace unavailable');
+    return r.json();
+  }).then(x=>{
+    if(!x)return;
+    if(x.status!=='running'){status.textContent='Starting Kali…';setTimeout(connect,1200);return}
+    const scheme=location.protocol==='https:'?'wss':'ws';
+    rfb=new RFB(screen,scheme+'://'+location.host+x.streamPath+'?ticket='+encodeURIComponent(x.ticket));
+    rfb.scaleViewport=true;
+    rfb.resizeSession=false;
+    rfb.clipViewport=false;
+    rfb.focusOnClick=true;
+    rfb.viewOnly=false;
+    rfb.addEventListener('connect',()=>{status.textContent='Kali Rolling · connected';ensureMobileKeyboard()});
+    rfb.addEventListener('disconnect',()=>status.textContent='Desktop disconnected');
+    rfb.addEventListener('securityfailure',()=>status.textContent='Desktop security handshake failed');
+  }).catch(e=>status.textContent=e.message||'Connection failed');
+}
+
+document.getElementById('keyboard').onclick=showKeyboard;
+document.getElementById('paste').onclick=paste;
+document.getElementById('cad').onclick=()=>rfb?.sendCtrlAltDel();
+document.getElementById('fs').onclick=()=>document.documentElement.requestFullscreen?.();
+document.getElementById('reconnect').onclick=connect;
+screen.addEventListener('click',()=>rfb?.focus());
+screen.addEventListener('touchstart',()=>rfb?.focus(),{passive:true});
+
+if('modelContext' in document){try{document.modelContext.registerTool({
+  name:'focus_omnikali_keyboard',
+  description:'Focus the mobile browser keyboard so text and Enter can be sent to the authenticated OmniKali desktop.',
+  inputSchema:{type:'object',properties:{},additionalProperties:false},
+  execute:async()=>{showKeyboard();return{status:'ready'}}
+})}catch{}}
+
+connect();
+</script>
+</body>
+</html>
