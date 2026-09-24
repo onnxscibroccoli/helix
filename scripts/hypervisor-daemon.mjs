@@ -225,7 +225,7 @@ const server=createServer(async(req,res)=>{
       const b=await body(req);
       const username=String(b.username||"");
       const password=String(b.password||"");
-      if(username!=="kali" || password.length<12 || password.length>128 || /[\u0000-\u001f\u007f]/.test(password))
+      if(!["root","kali"].includes(username) || password.length<12 || password.length>128 || /[\u0000-\u001f\u007f]/.test(password))
         return json(res,400,{error:"invalid password"});
       return json(res,200,await setGuestPassword(m[1],username,password));
     }
