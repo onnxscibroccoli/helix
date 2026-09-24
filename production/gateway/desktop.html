@@ -20,7 +20,7 @@ button:active,a:active{background:#1b2634}
 </head>
 <body>
 <div id="screen"></div>
-<textarea id="ime" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" tabindex="0" aria-label="Remote keyboard input"></textarea>
+<textarea id="ime" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" tabindex="-1" aria-label="Remote keyboard input"></textarea>
 <div id="keyboardHelp">Android keyboard is active — type into Kali. Enter sends Enter; Backspace deletes.</div>
 <div id="bar">
 <span id="status">Connecting to Kali…</span>
@@ -35,141 +35,110 @@ button:active,a:active{background:#1b2634}
 import RFB from '/novnc/core/rfb.js';
 import Keyboard from '/novnc/core/input/keyboard.js';
 import KeyTable from '/novnc/core/input/keysym.js';
+import keysyms from '/novnc/core/input/keysymdef.js';
 const id=__WORKSPACE_ID__;
 let rfb=null;
 let desktopKeyboard=null;
 let mobileKeyboard=false;
-let imeValue='';
+let lastKeyboardInput='';
 const status=document.getElementById('status');
 const screen=document.getElementById('screen');
 const ime=document.getElementById('ime');
 const help=document.getElementById('keyboardHelp');
-
 const isMobile=matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const DEFAULT_INPUT_LEN=100;
 
-function sendTap(keysym, code=null){
-  if(!rfb) return;
-  rfb.sendKey(keysym,code,true);
-  rfb.sendKey(keysym,code,false);
-}
-function sendText(text){
-  if(!rfb || !text) return;
-  for(const ch of [...text]){
-    const cp=ch.codePointAt(0);
-    let keysym=cp;
-    if(cp>0x7f) keysym=0x01000000|cp;
-    rfb.sendKey(keysym,null,true);
-    rfb.sendKey(keysym,null,false);
-  }
-}
-function sendMobileSpecial(e){
-  if(!rfb) return;
-  const code=e.code;
-  const key=e.key;
-  if(code==='Enter' || key==='Enter'){
-    e.preventDefault(); sendTap(KeyTable.XK_Return,'Enter'); ime.value=''; imeValue=''; return true;
-  }
-  if(code==='Backspace' || key==='Backspace'){
-    e.preventDefault(); sendTap(KeyTable.XK_BackSpace,'Backspace'); ime.value=''; imeValue=''; return true;
-  }
-  if(code==='Tab' || key==='Tab'){
-    e.preventDefault(); sendTap(KeyTable.XK_Tab,'Tab'); ime.value=''; imeValue=''; return true;
-  }
-  if(code==='Escape' || key==='Escape'){
-    e.preventDefault(); sendTap(KeyTable.XK_Escape,'Escape'); ime.value=''; imeValue=''; return true;
-  }
-  if(code==='ArrowLeft') {e.preventDefault();sendTap(KeyTable.XK_Left,'ArrowLeft');return true}
-  if(code==='ArrowRight'){e.preventDefault();sendTap(KeyTable.XK_Right,'ArrowRight');return true}
-  if(code==='ArrowUp')   {e.preventDefault();sendTap(KeyTable.XK_Up,'ArrowUp');return true}
-  if(code==='ArrowDown') {e.preventDefault();sendTap(KeyTable.XK_Down,'ArrowDown');return true}
-  return false;
+function keyboardInputReset(){
+  ime.value=new Array(DEFAULT_INPUT_LEN).join('_');
+  lastKeyboardInput=ime.value;
 }
 function enableMobileInput(){
   mobileKeyboard=true;
-  imeValue='';
-  ime.value='';
+  if(!lastKeyboardInput) keyboardInputReset();
   ime.focus({preventScroll:true});
+  try{ime.setSelectionRange(ime.value.length,ime.value.length)}catch{}
   status.textContent='Android keyboard active';
   help.style.display='block';
-  setTimeout(()=>{help.style.display='none'},2200);
+  setTimeout(()=>help.style.display='none',2200);
 }
-function disableMobileInput(){
-  mobileKeyboard=false;
-  try{ime.blur()}catch{}
+function sendMobileInput(event){
+  if(!rfb || !mobileKeyboard) return;
+  const newValue=event.target.value;
+  if(!lastKeyboardInput) keyboardInputReset();
+  const oldValue=lastKeyboardInput;
+  let newLen;
+  try{newLen=Math.max(event.target.selectionStart,newValue.length)}catch{newLen=newValue.length}
+  const oldLen=oldValue.length;
+  let inputs=newLen-oldLen;
+  let backspaces=inputs<0?-inputs:0;
+  for(let i=0;i<Math.min(oldLen,newLen);i++){
+    if(newValue.charAt(i)!==oldValue.charAt(i)){
+      inputs=newLen-i;
+      backspaces=oldLen-i;
+      break;
+    }
+  }
+  for(let i=0;i<backspaces;i++) rfb.sendKey(KeyTable.XK_BackSpace,'Backspace');
+  for(let i=newLen-inputs;i<newLen;i++) rfb.sendKey(keysyms.lookup(newValue.charCodeAt(i)));
+  if(newLen>2*DEFAULT_INPUT_LEN){
+    keyboardInputReset();
+  }else if(newLen<1){
+    keyboardInputReset();
+    event.target.blur();
+    setTimeout(()=>event.target.focus(),0);
+  }else{
+    lastKeyboardInput=newValue;
+  }
 }
 function setupKeyboard(){
   if(isMobile){
-    ime.addEventListener('input',e=>{
-      if(!mobileKeyboard || !rfb) return;
-      const value=ime.value;
-      if(value) sendText(value);
-      ime.value='';
-      imeValue='';
-    });
+    keyboardInputReset();
+    ime.addEventListener('input',sendMobileInput);
     ime.addEventListener('keydown',e=>{
       if(!mobileKeyboard) return;
-      if(e.keyCode===229 || e.isComposing) return;
-      sendMobileSpecial(e);
-    });
-    ime.addEventListener('compositionend',e=>{
-      if(!mobileKeyboard || !rfb) return;
-      const value=ime.value;
-      if(value){sendText(value);ime.value='';imeValue='';}
+      if(e.key==='Enter' || e.code==='Enter'){
+        e.preventDefault();rfb?.sendKey(KeyTable.XK_Return,'Enter');keyboardInputReset();
+      }else if(e.key==='Tab' || e.code==='Tab'){
+        e.preventDefault();rfb?.sendKey(KeyTable.XK_Tab,'Tab');keyboardInputReset();
+      }else if(e.key==='Escape' || e.code==='Escape'){
+        e.preventDefault();rfb?.sendKey(KeyTable.XK_Escape,'Escape');keyboardInputReset();
+      }
     });
   }else{
     desktopKeyboard=new Keyboard(screen);
-    desktopKeyboard.onkeyevent=(keysym,code,down)=>{if(rfb) rfb.sendKey(keysym,code,down)};
+    desktopKeyboard.onkeyevent=(keysym,code,down)=>{if(rfb)rfb.sendKey(keysym,code,down)};
     desktopKeyboard.grab();
   }
 }
 async function paste(){
-  try{
-    const text=await navigator.clipboard.readText();
-    if(text && rfb){rfb.clipboardPasteFrom(text);status.textContent='Pasted into Kali';}
-  }catch{status.textContent='Clipboard permission denied';}
+  try{const text=await navigator.clipboard.readText();if(text&&rfb){rfb.clipboardPasteFrom(text);status.textContent='Pasted into Kali'}}catch{status.textContent='Clipboard permission denied'}
 }
 function connect(){
-  if(rfb){try{rfb.disconnect()}catch{}}
-  status.textContent='Requesting desktop ticket…';
-  fetch('/api/v1/workspaces/'+encodeURIComponent(id),{cache:'no-store'}).then(async r=>{
-    if(r.status===401){location.href='/auth/login';return null}
-    if(!r.ok)throw Error('workspace unavailable');
-    return r.json();
-  }).then(x=>{
-    if(!x)return;
-    if(x.status!=='running'){status.textContent='Starting Kali…';setTimeout(connect,1200);return}
-    const scheme=location.protocol==='https:'?'wss':'ws';
-    rfb=new RFB(screen,scheme+'://'+location.host+x.streamPath+'?ticket='+encodeURIComponent(x.ticket));
-    rfb.scaleViewport=true;
-    rfb.resizeSession=false;
-    rfb.clipViewport=false;
-    rfb.focusOnClick=!isMobile;
-    rfb.viewOnly=false;
-    rfb.addEventListener('connect',()=>{
-      status.textContent='Kali Rolling · connected';
-      setupKeyboard();
-      if(isMobile) enableMobileInput();
-    });
-    rfb.addEventListener('disconnect',()=>status.textContent='Desktop disconnected');
-    rfb.addEventListener('securityfailure',()=>status.textContent='Desktop security handshake failed');
-  }).catch(e=>status.textContent=e.message||'Connection failed');
+ if(rfb){try{rfb.disconnect()}catch{}}
+ status.textContent='Requesting desktop ticket…';
+ fetch('/api/v1/workspaces/'+encodeURIComponent(id),{cache:'no-store'}).then(async r=>{
+   if(r.status===401){location.href='/auth/login';return null}
+   if(!r.ok)throw Error('workspace unavailable');
+   return r.json();
+ }).then(x=>{
+   if(!x)return;
+   if(x.status!=='running'){status.textContent='Starting Kali…';setTimeout(connect,1200);return}
+   const scheme=location.protocol==='https:'?'wss':'ws';
+   rfb=new RFB(screen,scheme+'://'+location.host+x.streamPath+'?ticket='+encodeURIComponent(x.ticket));
+   rfb.scaleViewport=true;rfb.resizeSession=false;rfb.clipViewport=false;rfb.focusOnClick=!isMobile;rfb.viewOnly=false;
+   rfb.addEventListener('connect',()=>{status.textContent='Kali Rolling · connected';setupKeyboard();if(isMobile)enableMobileInput()});
+   rfb.addEventListener('disconnect',()=>status.textContent='Desktop disconnected');
+   rfb.addEventListener('securityfailure',()=>status.textContent='Desktop security handshake failed');
+ }).catch(e=>status.textContent=e.message||'Connection failed');
 }
-
 document.getElementById('keyboard').onclick=enableMobileInput;
 document.getElementById('paste').onclick=paste;
 document.getElementById('cad').onclick=()=>rfb?.sendCtrlAltDel();
 document.getElementById('fs').onclick=()=>document.documentElement.requestFullscreen?.();
 document.getElementById('reconnect').onclick=connect;
-screen.addEventListener('click',()=>{if(!isMobile) rfb?.focus()});
-screen.addEventListener('touchstart',()=>{if(!isMobile) rfb?.focus()},{passive:true});
-
-if('modelContext' in document){try{document.modelContext.registerTool({
-  name:'focus_omnikali_keyboard',
-  description:'Focus the mobile browser keyboard so text and Enter can be sent to the authenticated OmniKali desktop.',
-  inputSchema:{type:'object',properties:{},additionalProperties:false},
-  execute:async()=>{enableMobileInput();return{status:'ready'}}
-})}catch{}}
-
+screen.addEventListener('click',()=>{if(!isMobile)rfb?.focus()});
+screen.addEventListener('touchstart',()=>{if(!isMobile)rfb?.focus()},{passive:true});
+if('modelContext'in document){try{document.modelContext.registerTool({name:'focus_omnikali_keyboard',description:'Focus the mobile browser keyboard so text and Enter can be sent to the authenticated OmniKali desktop.',inputSchema:{type:'object',properties:{},additionalProperties:false},execute:async()=>{enableMobileInput();return{status:'ready'}}})}catch{}}
 connect();
 </script>
 </body>
