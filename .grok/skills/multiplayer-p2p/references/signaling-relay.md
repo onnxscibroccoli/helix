@@ -41,7 +41,7 @@ Copy this file as-is (or adapt it — it is yours, not part of the kit):
 ```ts
 // src/lib/multiplayer/signaling.server.ts
 /**
- * WebRTC signaling over the app database (Neon deployed, PGLite in preview).
+ * WebRTC signaling over the app database (PostgreSQL deployed, PGLite in preview).
  * Only rendezvous traffic passes through here — roster + SDP/ICE relay while a
  * mesh forms; game data then flows peer-to-peer. DB-backed so any serverless
  * instance can serve any poll. Mount at /api/rtc (see the multiplayer-p2p

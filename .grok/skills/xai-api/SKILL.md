@@ -142,7 +142,7 @@ degrades or breaks every other use of their key. Be careful with usage:
   than chat.
 - **Never call the API in a loop, on every keystroke, or on page load** —
   make calls user-initiated (button press, form submit) and debounce.
-- **Cache or persist results** (see the `neon` skill) instead of regenerating
+- **Cache or persist results** (see the `postgres` skill) instead of regenerating
   the same content per visitor or per render.
 - **Gate expensive flows** — media generation in particular. On an app that
   already has sign-in, put them behind `authMiddleware` (see the **`auth`
