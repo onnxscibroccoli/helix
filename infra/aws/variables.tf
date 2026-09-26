@@ -38,6 +38,11 @@ variable "recovery_health_url" {
   default = "https://d22bad48irrbqe.cloudfront.net/"
 }
 
+variable "recovery_instance_id" {
+  type    = string
+  default = "i-03b6a82d46271d9cd"
+}
+
 variable "cognito_user_pool_id" {
   type    = string
   default = ""
