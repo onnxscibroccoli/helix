@@ -4,6 +4,8 @@ data "archive_file" "recovery_controller" {
   output_path = "${path.module}/.recovery_controller.zip"
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_dynamodb_table" "origin_recovery" {
   name         = "${var.name}-origin-recovery"
   billing_mode = "PAY_PER_REQUEST"
@@ -27,6 +29,7 @@ resource "aws_dynamodb_table" "origin_recovery" {
 data "aws_iam_policy_document" "recovery_assume" {
   statement {
     actions = ["sts:AssumeRole"]
+
     principals {
       type        = "Service"
       identifiers = ["lambda.amazonaws.com"]
@@ -42,41 +45,59 @@ resource "aws_iam_role" "origin_recovery" {
 data "aws_iam_policy_document" "origin_recovery" {
   statement {
     sid = "InstanceRecovery"
+
     actions = [
       "ec2:DescribeInstances",
-      "ec2:DescribeInstanceStatus",
+      "ec2:DescribeInstanceStatus"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "MutateRecoveryTarget"
+
+    actions = [
       "ec2:StartInstances",
       "ec2:RebootInstances"
     ]
-    resources = ["*"]
+
+    resources = [
+      "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:instance/${var.recovery_instance_id}"
+    ]
   }
 
   statement {
     sid = "RunHostGuard"
+
     actions = [
       "ssm:DescribeInstanceInformation",
       "ssm:SendCommand"
     ]
-    resources = ["*"]
+
+    resources = [
+      "arn:aws:ssm:${var.region}::document/AWS-RunShellScript",
+      "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:instance/${var.recovery_instance_id}"
+    ]
   }
 
   statement {
-    sid = "StateLock"
-    actions = [
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:DeleteItem"
+    sid     = "StateLock"
+    actions = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
+    resources = [
+      aws_dynamodb_table.origin_recovery.arn
     ]
-    resources = [aws_dynamodb_table.origin_recovery.arn]
   }
 
   statement {
     sid = "Logs"
+
     actions = [
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
       "logs:PutLogEvents"
     ]
+
     resources = ["*"]
   }
 }
@@ -94,23 +115,23 @@ resource "aws_cloudwatch_log_group" "origin_recovery" {
 
 resource "aws_lambda_function" "origin_recovery" {
   function_name    = "${var.name}-origin-recovery"
-  description     = "Graduated self-healing controller for the Helix CloudFront origin"
-  role            = aws_iam_role.origin_recovery.arn
-  runtime         = "python3.13"
-  handler         = "recovery_controller.lambda_handler"
-  filename        = data.archive_file.recovery_controller.output_path
+  description      = "Graduated self-healing controller for the Helix CloudFront origin"
+  role             = aws_iam_role.origin_recovery.arn
+  runtime          = "python3.13"
+  handler          = "recovery_controller.lambda_handler"
+  filename         = data.archive_file.recovery_controller.output_path
   source_code_hash = data.archive_file.recovery_controller.output_base64sha256
-  timeout         = 20
-  memory_size     = 256
+  timeout          = 20
+  memory_size      = 256
 
   environment {
     variables = {
-      INSTANCE_ID               = aws_instance.hypervisor.id
-      HEALTH_URL                = var.recovery_health_url
-      TABLE_NAME                = aws_dynamodb_table.origin_recovery.name
-      LEASE_SECONDS             = "45"
-      REBOOT_COOLDOWN_SECONDS   = "600"
-      MEMORY_FLOOR_MB           = "256"
+      INSTANCE_ID             = var.recovery_instance_id
+      HEALTH_URL              = var.recovery_health_url
+      TABLE_NAME              = aws_dynamodb_table.origin_recovery.name
+      LEASE_SECONDS           = "45"
+      REBOOT_COOLDOWN_SECONDS = "600"
+      MEMORY_FLOOR_MB         = "256"
     }
   }
 
