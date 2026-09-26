@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     env: { HELIX_SKIP_LIVE: "1" }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "22" }
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform -chdir=infra/terraform fmt -check
       - run: terraform -chdir=infra/terraform init -backend=false
       - run: terraform -chdir=infra/terraform validate
@@ -27,8 +27,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, linux, helix-hypervisor]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
       - run: python -m pip install --disable-pip-version-check pytest
       - run: test -e /dev/kvm
