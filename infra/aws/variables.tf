@@ -1,14 +1,43 @@
-variable "region" { type = string default = "us-east-1" }
-variable "name" { type = string default = "helix-desktop" }
-variable "instance_type" { type = string default = "m8i.2xlarge" }
-variable "root_volume_size" { type = number default = 80 }
-variable "persistent_volume_size" { type = number default = 200 }
-variable "allowed_gateway_cidr" { type = string default = "0.0.0.0/0" }
+variable "region" {
+  type    = string
+  default = "us-east-1"
+}
 
-# Optional existing Cognito app client used by the Helix gateway.
-# When both IDs are supplied, Terraform manages the required Managed Login
-# branding style so a newly-created app client cannot regress to the
-# "Login pages unavailable" state.
+variable "name" {
+  type    = string
+  default = "helix-desktop"
+}
+
+variable "instance_type" {
+  type    = string
+  default = "m8i.2xlarge"
+}
+
+variable "root_volume_size" {
+  type    = number
+  default = 80
+}
+
+variable "persistent_volume_size" {
+  type    = number
+  default = 200
+}
+
+variable "allowed_gateway_cidr" {
+  type    = string
+  default = "0.0.0.0/0"
+}
+
+variable "cloudfront_distribution_id" {
+  type    = string
+  default = "E3AT3ETQQVLZJ4"
+}
+
+variable "recovery_health_url" {
+  type    = string
+  default = "https://d22bad48irrbqe.cloudfront.net/"
+}
+
 variable "cognito_user_pool_id" {
   type    = string
   default = ""
