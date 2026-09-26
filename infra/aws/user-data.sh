@@ -5,6 +5,35 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients virtinst bridge-utils ovmf nginx git curl ca-certificates nodejs npm python3-venv cpu-checker util-linux
 
+# Host memory guardrails: the nested Kali guest is memory-heavy, so preserve
+# host recovery capacity with persistent swap and service cgroup ceilings.
+if ! swapon --show | grep -q '^/swapfile '; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+fi
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+install -d -m 0755 /etc/systemd/system/paperclip.service.d
+cat >/etc/systemd/system/paperclip.service.d/10-memory.conf <<'EOF'
+[Service]
+MemoryHigh=900M
+MemoryMax=1200M
+Restart=on-failure
+RestartSec=5s
+EOF
+
+install -d -m 0755 /etc/systemd/system/helix-gateway.service.d
+cat >/etc/systemd/system/helix-gateway.service.d/10-memory.conf <<'EOF'
+[Service]
+MemoryHigh=600M
+MemoryMax=800M
+Restart=always
+RestartSec=3s
+EOF
+systemctl daemon-reload
+
 # AWS Ubuntu AMIs normally ship with SSM Agent. Keep provisioning deterministic
 # and fail the build if the agent cannot be started.
 if ! snap list amazon-ssm-agent >/dev/null 2>&1; then
