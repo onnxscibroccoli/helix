@@ -1,5 +1,3 @@
-[Reading 57 lines from start (total: 57 lines, 0 remaining)]
-
 -- OmniKali task state is part of the existing Helix control-plane database.
 -- workspace_id links an orchestration task to the durable workspace ownership
 -- boundary without constraining non-workspace targets (for example AWS nodes).
@@ -57,5 +55,3 @@ create table if not exists omnikali_task_events (
 
 create index if not exists omnikali_task_events_task_idx
   on omnikali_task_events (task_id, created_at desc);
-
-[executed on device: ip-172-31-8-59 (882f1036-235b-4669-acaf-1e1135b156bd)]
