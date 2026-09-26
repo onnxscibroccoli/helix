@@ -1,5 +1,3 @@
-[Reading 34 lines from start (total: 34 lines, 0 remaining)]
-
 CREATE TABLE IF NOT EXISTS omnikali_tasks (
   task_id uuid PRIMARY KEY,
   target text NOT NULL,
@@ -34,5 +32,3 @@ CREATE TABLE IF NOT EXISTS omnikali_task_events (
 
 CREATE INDEX IF NOT EXISTS omnikali_task_events_task_idx
   ON omnikali_task_events (task_id, created_at DESC);
-
-[executed on device: ip-172-31-8-59 (882f1036-235b-4669-acaf-1e1135b156bd)]
