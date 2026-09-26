@@ -1,5 +1,3 @@
-[Reading 198 lines from start (total: 198 lines, 0 remaining)]
-
 import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
@@ -198,5 +196,3 @@ export class TaskStateStore {
 }
 
 export { TASK_STATES };
-
-[executed on device: ip-172-31-8-59 (882f1036-235b-4669-acaf-1e1135b156bd)]
