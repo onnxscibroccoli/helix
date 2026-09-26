@@ -9,6 +9,11 @@ import { createConnection } from "node:net";
 import { createRequire } from "node:module";
 import { readFileSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
+import { TaskStateStore } from "./state/task-state.mjs";
+import { TaskRunner } from "./state/task-runner.mjs";
+import { createAgentExecutor } from "./state/agent-executor.mjs";
+import { createTaskDispatch } from "./state/task-dispatch.mjs";
+import { TaskWorker } from "./state/task-worker.mjs";
 
 const HOST = process.env.GATEWAY_HOST || "127.0.0.1";
 const PORT = Number(process.env.GATEWAY_PORT || 8092);
@@ -69,6 +74,29 @@ async function workspace(req,res,id){const s=await verify(parseCookies(req)[COOK
     d=claimed;
   }if(d.body.status!=="running"){const started=await hv("/domains",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,kind:d.body.kind==="ephemeral"?"ephemeral":"persistent",owner:s.sub})});if(started.status>=400)return json(res,started.status,{error:"workspace failed to start"});d=started;}if(d.body.status!=="running"||d.body.display==null)return json(res,409,{error:"workspace is not ready yet"});const ticket=await sign({sub:s.sub,workspace:id,kind:"desktop"},WS_TTL);return json(res,200,{workspace:id,status:d.body.status,display:d.body.display,streamPath:"/kasm/ws/"+id,ticket})}
 async function session(req){return verify(parseCookies(req)[COOKIE])}
+let taskControlPromise;
+async function taskControl(){
+  if(!taskControlPromise){
+    taskControlPromise=(async()=>{
+      const store=new TaskStateStore();
+      const runner=new TaskRunner({store,workerId:process.env.OMNIKALI_WORKER_ID || ('gateway-'+randomBytes(12).toString('hex')),executors:{kali:createAgentExecutor({})},heartbeatSeconds:Number(process.env.TASK_HEARTBEAT_SECONDS || 15)});
+      const dispatch=createTaskDispatch({store,runner,workspaceExists:async id=>(await hv('/domains/'+encodeURIComponent(id))).status===200});
+      const worker=new TaskWorker({runner,intervalMs:Number(process.env.TASK_WORKER_INTERVAL_MS || 1000)}); worker.start();
+      return {store,runner,dispatch,worker};
+    })().catch(error=>{taskControlPromise=null;throw error});
+  }
+  return taskControlPromise;
+}
+async function taskSubmit(req,res){
+  const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
+  const b=await requestBody(req), taskId=String(b.task_id||""), target=String(b.target||""), idempotencyKey=String(b.idempotency_key||""), payload=b.payload===undefined?{}:b.payload, workspaceId=b.workspace_id==null?null:String(b.workspace_id);
+  if(!/^[0-9a-fA-F-]{36}$/.test(taskId))return json(res,400,{error:"task_id must be a UUID"});
+  if(!target)return json(res,400,{error:"target is required"});
+  if(!idempotencyKey)return json(res,400,{error:"idempotency_key is required"});
+  if(workspaceId){const d=await hv("/domains/"+encodeURIComponent(workspaceId));if(d.status!==200)return json(res,404,{error:"workspace not found"});if(d.body.owner!==s.sub)return json(res,403,{error:"workspace not authorized"});}
+  try{const c=await taskControl();const task=await c.dispatch({taskId,target,payload,idempotencyKey,workspaceId});return json(res,202,{task_id:task.task_id,state:task.state,target:task.target,workspace_id:task.workspace_id,idempotency_key:task.idempotency_key});}
+  catch(e){if(/idempotency_key already exists/.test(e.message||""))return json(res,409,{error:e.message});if(e.statusCode)return json(res,e.statusCode,{error:e.message});console.error("[helix-gateway] task dispatch failed",e);return json(res,500,{error:"task dispatch failed"});}
+}
 async function requestBody(req){return new Promise((resolve,reject)=>{const chunks=[];req.on("data",x=>chunks.push(x));req.on("end",()=>{try{resolve(chunks.length?JSON.parse(Buffer.concat(chunks)):{});}catch(e){reject(e)}});req.on("error",reject)})}
 async function forgotCloudPassword(req,res){
   if(!configured()) return html(res,503,"<h1>OmniKali Cloud</h1><p>Authentication is not configured.</p>");
@@ -146,6 +174,7 @@ const server=createServer(async (req,res)=>{
       res.writeHead(302,{location:logout, "set-cookie":clearCookie(COOKIE), "cache-control":"no-store"});
       return res.end();
     }
+    if(req.method==="POST" && u.pathname==="/api/v1/tasks") return taskSubmit(req,res);
     if(req.method==="GET" && u.pathname==="/api/v1/workspaces") return workspaceList(req,res);
     if(req.method==="POST" && u.pathname==="/api/v1/workspaces") return workspaceCreate(req,res);
     if(req.method==="POST" && u.pathname.match(/^\/api\/v1\/workspaces\/[^/]+\/password$/)) return setKaliPassword(req,res,u.pathname.split("/")[4]);
