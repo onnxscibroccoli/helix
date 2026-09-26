@@ -207,4 +207,4 @@ const server=createServer(async (req,res)=>{
   }
 });
 server.on("upgrade",(req,socket,head)=>void upgrade(req,socket,head));
-server.listen(PORT,HOST,()=>console.log("[helix-gateway] "+HOST+":"+PORT+" oidc="+configured()+" clientSecret="+(CLIENT_SECRET?"present":"missing")+" secretLength="+CLIENT_SECRET.length));
+server.listen(PORT,HOST,()=>{ console.log("[helix-gateway] "+HOST+":"+PORT+" oidc="+configured()+" clientSecret="+(CLIENT_SECRET?"present":"missing")+" secretLength="+CLIENT_SECRET.length); taskControl().catch(error=>console.error("[omnikali-worker] startup failed",error)); });
