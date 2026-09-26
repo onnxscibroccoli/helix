@@ -154,6 +154,13 @@ export class TaskStateStore {
     } finally { client.release(); }
   }
 
+  async getTask(taskId) {
+    const task = await this.pool.query('SELECT task_id,target,payload,idempotency_key,state,workspace_id,owner_id,attempts,started_at,heartbeat_at,lease_expires_at,completed_at,result,error,created_at,updated_at FROM omnikali_tasks WHERE task_id=$1', [taskId]);
+    if (!task.rowCount) return null;
+    const events = await this.pool.query('SELECT event_id,from_state,to_state,owner_id,detail,created_at FROM omnikali_task_events WHERE task_id=$1 ORDER BY event_id ASC', [taskId]);
+    return { ...task.rows[0], events: events.rows };
+  }
+
   async reconcileExpired() {
     const client = await this.pool.connect();
     try {

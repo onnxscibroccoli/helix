@@ -4,7 +4,7 @@ Read this **after** `AGENTS.md` §0.5 has already said the app needs a database
 and/or sign-in. The decision (auth OFF by default, the closed trigger list, "no
 migrations / no `@/lib/db` unless triggered") lives in `AGENTS.md`, not here.
 
-Full guides + snippets: the **`neon` skill** (database) and the **`auth` skill**
+Full guides + snippets: the **`postgres` skill** (database) and the **`auth` skill**
 (sign-in), under `.grok/skills/`.
 
 ## Database (`@/lib/db`, server-only)
@@ -17,11 +17,11 @@ Full guides + snippets: the **`neon` skill** (database) and the **`auth` skill**
   app has migrations. Do not remove that.
 - A deployed app is provisioned a real database when it ships `migrations/*.sql`
   or sign-in. An app that needs one without either says so with
-  `"deploy": {"database": true}` in `.grok/app-env.json` — see the `neon` skill.
+  `"deploy": {"database": true}` in `.grok/app-env.json` — see the `postgres` skill.
 
 ## Migrations
 
-- `migrations/*.sql` is the single schema source: applied to **Neon on deploy**
+- `migrations/*.sql` is the single schema source: applied to **PostgreSQL on deploy**
   (`npm run build` runs `npm run db:migrate`, so Vercel ships with the schema
   ready) and to the **PGLite** preview automatically on startup.
 - Add the app's tables as ordered files (`migrations/0002_*.sql`), not inline.
@@ -35,7 +35,7 @@ Full guides + snippets: the **`neon` skill** (database) and the **`auth` skill**
 ## Server functions
 
 `createServerFn` with input via `.validator()` — the current API on the
-installed version (`.inputValidator()` is deprecated). Examples in the `neon`
+installed version (`.inputValidator()` is deprecated). Examples in the `postgres`
 and `auth` skills.
 
 ## Auth wiring (only once §0.5 says accounts)

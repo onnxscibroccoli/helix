@@ -156,6 +156,10 @@ const server=createServer(async (req,res)=>{
   try {
     const u=new URL(req.url||"/","http://"+HOST+":"+PORT);
     if(await omniKaliHandoff(req,res,u)) return;
+    if(req.method==="GET" && u.pathname==="/acceptance") {
+      const s=await session(req); if(!s){res.writeHead(302,{location:"/auth/login"});return res.end()}
+      return html(res,200,readFileSync("/opt/helix/production/gateway/acceptance.html","utf8"));
+    }
     if(req.method==="GET" && u.pathname==="/health") {
       return json(res,200,{ok:true,oidcConfigured:configured(),publicOrigin:PUBLIC_ORIGIN||null});
     }
@@ -175,6 +179,15 @@ const server=createServer(async (req,res)=>{
       return res.end();
     }
     if(req.method==="POST" && u.pathname==="/api/v1/tasks") return taskSubmit(req,res);
+    if(req.method==="GET" && u.pathname.match(/^\/api\/v1\/acceptance\/tasks\/[0-9a-fA-F-]{36}$/)) {
+      const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
+      const id=u.pathname.split("/").pop(), c=await taskControl(), task=await c.store.getTask(id);
+      if(!task)return json(res,404,{error:"task not found"});
+      if(task.workspace_id!=="omnikali")return json(res,403,{error:"task not authorized"});
+      const d=await hv("/domains/omnikali");
+      if(d.status!==200 || (d.body.owner && d.body.owner!==s.sub))return json(res,403,{error:"workspace not authorized"});
+      return json(res,200,task);
+    }
     if(req.method==="GET" && u.pathname==="/api/v1/workspaces") return workspaceList(req,res);
     if(req.method==="POST" && u.pathname==="/api/v1/workspaces") return workspaceCreate(req,res);
     if(req.method==="POST" && u.pathname.match(/^\/api\/v1\/workspaces\/[^/]+\/password$/)) return setKaliPassword(req,res,u.pathname.split("/")[4]);
@@ -194,4 +207,4 @@ const server=createServer(async (req,res)=>{
   }
 });
 server.on("upgrade",(req,socket,head)=>void upgrade(req,socket,head));
-server.listen(PORT,HOST,()=>console.log("[helix-gateway] "+HOST+":"+PORT+" oidc="+configured()+" clientSecret="+(CLIENT_SECRET?"present":"missing")+" secretLength="+CLIENT_SECRET.length));
+server.listen(PORT,HOST,()=>{ console.log("[helix-gateway] "+HOST+":"+PORT+" oidc="+configured()+" clientSecret="+(CLIENT_SECRET?"present":"missing")+" secretLength="+CLIENT_SECRET.length); taskControl().catch(error=>console.error("[omnikali-worker] startup failed",error)); });

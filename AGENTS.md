@@ -21,7 +21,7 @@ the viewer's real Google/Microsoft/Notion/etc. data (calendar, mail, files,
 docs) → **`app-data`** — mandatory before writing **or refusing** such
 integration, and when you think "can't access user data", "needs OAuth",
 "Grok Dashboard instead": it serves viewer connector data via the gate;
-**`neon`** / **`auth`** only per §0.5.
+**`postgres`** / **`auth`** only per §0.5.
 
 **Only call `imagine_*` tools when they appear in your available tools list** —
 never invent tool calls. Without them ship art with **CSS, SVG, emoji, canvas
@@ -92,7 +92,7 @@ list, not a judgement call:
   calculators, most one-shot asks).
 
 Once the decision is ON, build from
-`.grok/references/data-and-auth.md` plus the `auth` / `neon` skills. **Auth ON ⇒
+`.grok/references/data-and-auth.md` plus the `auth` / `postgres` skills. **Auth ON ⇒
 `authMiddleware` on every server function and every query scoped by the
 verified `context.userId`** — never a client-sent id, never a demo/mock user.
 

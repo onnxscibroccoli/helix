@@ -79,7 +79,7 @@ Do all of this — the routes alone render the disabled branch:
 4. **Sign out:** a login with no way out is not done — render `<UserButton />`
    from `@/lib/auth/gates` (wires `signOut()`; hides sign-out for gate sessions).
 5. **Existing data:** wrap the app's server functions in `authMiddleware` (an
-   auth-off app must not have been using it — see the `neon` skill). Rows from
+   auth-off app must not have been using it — see the `postgres` skill). Rows from
    before sign-in existed are **development data**: drop and recreate them
    unless the user says otherwise — don't hand them to whoever signs in first.
 

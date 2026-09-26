@@ -1,6 +1,6 @@
 # Per-user data (server-side — mandatory)
 
-Pair auth with the DB (see the `neon` skill). A regular Postgres driver has full
+Pair auth with the DB (see the `postgres` skill). A regular Postgres driver has full
 DB access, so **every** server function that touches per-user data must verify
 the caller and scope rows to them. Use the prewired **`authMiddleware`**: it
 resolves the same-origin session to a verified `context.userId` (and rejects
@@ -44,6 +44,6 @@ live preview too (real auth). With auth disabled (`VITE_AUTH_ENABLED=false`) it
 resolves the dev user (`"dev-user"`) in dev and preview only — the deployed flag
 comes from the deployer (today always `"true"`), so deployed it rejects every
 visitor — which is why an app without sign-in must not use the middleware at all
-(see the `neon` skill). Keep `user_id` columns
+(see the `postgres` skill). Keep `user_id` columns
 `TEXT` (Better Auth uses text ids; the disabled dev user is `'dev-user'`). Never
 trust a client-supplied user id — only the middleware / `requireUserId()` result.
