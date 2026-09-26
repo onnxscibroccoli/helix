@@ -90,8 +90,8 @@ def send_host_guard():
         "set -eu",
         "local_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/ || true)",
         "mem_avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)",
-        "if [ "$local_code" != "200" ]; then systemctl restart nginx helix-gateway; fi",
-        f"if [ "$mem_avail_kb" -lt {MEMORY_FLOOR_MB * 1024} ]; then systemctl restart paperclip.service || true; fi",
+        'if [ "$local_code" != "200" ]; then systemctl restart nginx helix-gateway; fi',
+        f'if [ "$mem_avail_kb" -lt {MEMORY_FLOOR_MB * 1024} ]; then systemctl restart paperclip.service || true; fi',
         "systemctl is-active --quiet nginx",
     ]
     return ssm.send_command(
