@@ -1,5 +1,10 @@
 #!/bin/sh
 set -eu
+if [ -r /etc/helix/agent.env ]; then
+  set -a
+  . /etc/helix/agent.env
+  set +a
+fi
 export OIDC_CLIENT_SECRET="$(
   /usr/bin/aws cognito-idp describe-user-pool-client     --region us-east-1     --user-pool-id us-east-1_40X8yJKI2     --client-id 4co7gd1bo4re206klembj9nr43     --query UserPoolClient.ClientSecret     --output text
 )"
