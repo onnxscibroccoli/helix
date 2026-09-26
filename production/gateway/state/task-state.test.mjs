@@ -1,5 +1,3 @@
-[Reading 83 lines from start (total: 83 lines, 0 remaining)]
-
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TaskStateStore, TASK_STATES } from './task-state.mjs';
@@ -83,5 +81,3 @@ test('expired reconciliation commits state and audit atomically', async () => {
   assert.equal(pool.calls.filter(x => x.sql === 'BEGIN').length, 1);
   assert.equal(pool.calls.filter(x => x.sql === 'COMMIT').length, 1);
 });
-
-[executed on device: ip-172-31-8-59 (882f1036-235b-4669-acaf-1e1135b156bd)]
