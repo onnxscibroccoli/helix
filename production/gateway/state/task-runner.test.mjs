@@ -17,8 +17,12 @@ test('runner claims, executes, heartbeats and completes a task', async () => {
   const task = { task_id: 't1', target: 'kali', payload: { command: 'true' } };
   const store = storeFor(task);
   const seen = [];
-  const runner = new TaskRunner({ store, workerId: 'worker-a', heartbeatSeconds: 1,
-    executors: { kali: async t => { seen.push(t); return { exitCode: 0 }; } } });
+  const runner = new TaskRunner({
+    store,
+    workerId: 'worker-a',
+    heartbeatSeconds: 1,
+    executors: { kali: async t => { seen.push(t); return { exitCode: 0 }; } },
+  });
   const result = await runner.runOnce({ target: 'kali' });
   assert.equal(result.state, 'COMPLETED');
   assert.equal(seen.length, 1);
@@ -38,8 +42,11 @@ test('unsupported target fails without executing anything', async () => {
 test('executor failure is converted into FAILED task state', async () => {
   const task = { task_id: 't3', target: 'kali', payload: {} };
   const store = storeFor(task);
-  const runner = new TaskRunner({ store, workerId: 'worker-a',
-    executors: { kali: async () => { throw Object.assign(new Error('boom'), { code: 'EXECUTOR_ERROR' }); } } });
+  const runner = new TaskRunner({
+    store,
+    workerId: 'worker-a',
+    executors: { kali: async () => { throw Object.assign(new Error('boom'), { code: 'EXECUTOR_ERROR' }); } },
+  });
   const result = await runner.runOnce();
   assert.equal(result.state, 'FAILED');
   assert.equal(result.error.code, 'EXECUTOR_ERROR');
@@ -52,4 +59,20 @@ test('command executor preserves task payload boundary', async () => {
   const payload = { command: 'printf ok', cwd: '/root', timeout: 30 };
   await executors.kali({ payload });
   assert.deepEqual(received, payload);
+});
+
+test('runner does not dispatch a task after durable cancellation is requested', async () => {
+  const task = { task_id: 't-cancel', target: 'kali', cancel_requested_at: '2026-09-27T04:00:00.000Z', payload: { command: 'should-not-run' } };
+  const store = storeFor(task);
+  let executed = false;
+  const runner = new TaskRunner({
+    store,
+    workerId: 'worker-a',
+    executors: { kali: async () => { executed = true; return { exitCode: 0 }; } },
+  });
+  const result = await runner.runOnce();
+  assert.equal(result.state, 'FAILED');
+  assert.equal(result.error.code, 'CANCELLATION_REQUESTED');
+  assert.equal(executed, false);
+  assert.equal(store.calls.at(-1)[0], 'fail');
 });

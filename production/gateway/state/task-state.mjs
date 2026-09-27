@@ -11,11 +11,12 @@ const TASK_STATES = Object.freeze({
 
 export class TaskStateStore {
   constructor({ databaseUrl = process.env.DATABASE_URL, redisUrl = process.env.REDIS_URL,
-    leaseSeconds = Number(process.env.TASK_LEASE_SECONDS || 45), pool = null, redis = null } = {}) {
+    leaseSeconds = Number(process.env.TASK_LEASE_SECONDS || 45), cancellationWindowSeconds = Number(process.env.TASK_CANCELLATION_WINDOW_SECONDS || 30), pool = null, redis = null } = {}) {
     if (!databaseUrl && !pool) throw new Error('DATABASE_URL is required');
     this.pool = pool || new Pool({ connectionString: databaseUrl, max: 10 });
     this.redis = redis || (redisUrl ? new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 2 }) : null);
     this.leaseMs = Math.max(5000, leaseSeconds * 1000);
+    this.cancellationWindowMs = Math.max(1000, cancellationWindowSeconds * 1000);
   }
 
   async init() {
@@ -113,6 +114,67 @@ export class TaskStateStore {
     return result.rows[0];
   }
 
+  async requestCancellation(taskId, requestedBy = 'unknown') {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        `SELECT * FROM omnikali_tasks WHERE task_id=$1 FOR UPDATE`, [taskId]
+      );
+      if (!current.rowCount) throw new Error('task not found');
+      const row = current.rows[0];
+      if (row.state === 'COMPLETED' || row.state === 'FAILED') {
+        await client.query('COMMIT');
+        return { accepted: false, task: row };
+      }
+      const updated = await client.query(
+        `UPDATE omnikali_tasks
+         SET cancel_requested_at=COALESCE(cancel_requested_at, now()),
+             cancel_requested_by=COALESCE(cancel_requested_by, $2),
+             cancel_reconciliation_deadline=COALESCE(cancel_reconciliation_deadline, now()+($3::bigint*interval '1 millisecond')),
+             updated_at=now()
+         WHERE task_id=$1
+         RETURNING *`,
+        [taskId, requestedBy, this.cancellationWindowMs]
+      );
+      await client.query(
+        `INSERT INTO omnikali_task_events (task_id,from_state,to_state,owner_id,detail)
+         VALUES ($1,$2,$2,NULL,$3::jsonb)`,
+        [taskId, row.state, JSON.stringify({ reason: 'cancellation_requested', requestedBy })]
+      );
+      await client.query('COMMIT');
+      return { accepted: true, task: updated.rows[0] };
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally { client.release(); }
+  }
+
+  async acknowledgeCancellation(taskId, acknowledgedBy = 'executor') {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `UPDATE omnikali_tasks
+         SET cancel_acknowledged_at=COALESCE(cancel_acknowledged_at, now()), updated_at=now()
+         WHERE task_id=$1 AND cancel_requested_at IS NOT NULL
+         RETURNING task_id,state,cancel_requested_at,cancel_acknowledged_at,cancel_reconciliation_deadline`,
+        [taskId]
+      );
+      if (!result.rowCount) throw new Error('cancellation acknowledgement rejected: no request exists');
+      await client.query(
+        `INSERT INTO omnikali_task_events (task_id,from_state,to_state,owner_id,detail)
+         VALUES ($1,$2,$2,$3,$4::jsonb)`,
+        [taskId, result.rows[0].state, acknowledgedBy, JSON.stringify({ reason: 'cancellation_acknowledged', acknowledgedBy })]
+      );
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally { client.release(); }
+  }
+
   async complete(taskId, ownerId, result = {}) {
     return this.#finish(taskId, ownerId, 'COMPLETED', { result });
   }
@@ -126,10 +188,15 @@ export class TaskStateStore {
     try {
       await client.query('BEGIN');
       const current = await client.query(
-        'SELECT state FROM omnikali_tasks WHERE task_id=$1 FOR UPDATE', [taskId]
+        'SELECT state,cancel_requested_at,cancel_acknowledged_at FROM omnikali_tasks WHERE task_id=$1 FOR UPDATE', [taskId]
       );
       if (!current.rowCount) throw new Error('task not found');
       if (current.rows[0].state !== 'RUNNING') throw new Error('task is not RUNNING');
+      const cancellationUnconfirmed = state === 'COMPLETED' && current.rows[0].cancel_requested_at && !current.rows[0].cancel_acknowledged_at;
+      const effectiveState = cancellationUnconfirmed ? 'FAILED' : state;
+      const effectiveError = cancellationUnconfirmed
+        ? { code: 'CANCELLATION_UNCONFIRMED', message: 'Executor completion raced with an unacknowledged cancellation request; external side effect requires reconciliation' }
+        : data.error;
       const updated = await client.query(
         `UPDATE omnikali_tasks
          SET state=$3,
@@ -137,14 +204,14 @@ export class TaskStateStore {
              error=CASE WHEN $3='FAILED' THEN $5::jsonb ELSE error END,
              completed_at=now(), updated_at=now(), lease_expires_at=NULL
          WHERE task_id=$1 AND owner_id=$2 RETURNING *`,
-        [taskId, ownerId, state, JSON.stringify(data.result || null), JSON.stringify(data.error || null)]
+        [taskId, ownerId, effectiveState, JSON.stringify(data.result || null), JSON.stringify(effectiveError || null)]
       );
       if (!updated.rowCount) throw new Error('task completion rejected: owner mismatch');
       await client.query(
         `INSERT INTO omnikali_task_events
          (task_id,from_state,to_state,owner_id,detail)
          VALUES ($1,'RUNNING',$2,$3,$4::jsonb)`,
-        [taskId, state, ownerId, JSON.stringify(data)]
+        [taskId, effectiveState, ownerId, JSON.stringify(cancellationUnconfirmed ? { ...data, error: effectiveError } : data)]
       );
       await client.query('COMMIT');
       return updated.rows[0];
@@ -155,7 +222,7 @@ export class TaskStateStore {
   }
 
   async getTask(taskId) {
-    const task = await this.pool.query('SELECT task_id,target,payload,idempotency_key,state,workspace_id,owner_id,attempts,started_at,heartbeat_at,lease_expires_at,completed_at,result,error,created_at,updated_at FROM omnikali_tasks WHERE task_id=$1', [taskId]);
+    const task = await this.pool.query('SELECT task_id,target,payload,idempotency_key,state,workspace_id,owner_id,attempts,started_at,heartbeat_at,lease_expires_at,cancel_requested_at,cancel_requested_by,cancel_acknowledged_at,cancel_reconciliation_deadline,completed_at,result,error,created_at,updated_at FROM omnikali_tasks WHERE task_id=$1', [taskId]);
     if (!task.rowCount) return null;
     const events = await this.pool.query('SELECT event_id,from_state,to_state,owner_id,detail,created_at FROM omnikali_task_events WHERE task_id=$1 ORDER BY event_id ASC', [taskId]);
     return { ...task.rows[0], events: events.rows };

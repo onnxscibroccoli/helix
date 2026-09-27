@@ -54,23 +54,6 @@ async function qemuImg(args) {
   const { stdout } = await exec(QEMU_IMG, args, { timeout: 30000 });
   return stdout.trim();
 }
-async function qga(name,payload){
-  const {stdout}=await exec(VIRSH,["-c",URI,"qemu-agent-command",name,JSON.stringify(payload)],{timeout:15000});
-  return JSON.parse(stdout.trim());
-}
-async function setGuestPassword(id,username,password){
-  if(!["root","kali"].includes(username)) throw new Error("only root or the Kali desktop user can be changed");
-  const name=domainName(id);
-  if(!(await existsDomain(name))) throw new Error("workspace not found");
-  if((await domainState(name))!=="running") throw new Error("workspace is not running");
-  const response=await qga(name,{execute:"guest-set-user-password",arguments:{
-    username,
-    password:Buffer.from(password,"utf8").toString("base64"),
-    crypted:false
-  }});
-  if(response.error) throw new Error(response.error.desc||"guest password update failed");
-  return {ok:true,username};
-}
 function validId(id) {
   return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(id);
 }
@@ -220,15 +203,6 @@ const server=createServer(async(req,res)=>{
     if(req.method==="GET" && url.pathname==="/health") return json(res,200,{ok:true});
     if(req.method==="GET" && url.pathname==="/capabilities") return json(res,200,await capabilities());
     if(req.method==="GET" && url.pathname==="/domains") return json(res,200,await domains());
-    const pm=url.pathname.match(/^\/domains\/([^/]+)\/password$/);
-    if(pm && req.method==="POST") {
-      const b=await body(req);
-      const username=String(b.username||"");
-      const password=String(b.password||"");
-      if(!["root","kali"].includes(username) || password.length<12 || password.length>128 || /[\u0000-\u001f\u007f]/.test(password))
-        return json(res,400,{error:"invalid password"});
-      return json(res,200,await setGuestPassword(pm[1],username,password));
-    }
     const m=url.pathname.match(/^\/domains\/([^/]+)$/);
     if(m && req.method==="GET") { const d=await describe(m[1]); return d?json(res,200,d):json(res,404,{error:"not found"}); }
     if(m && req.method==="DELETE") return json(res,200,await destroyDomain(m[1]));

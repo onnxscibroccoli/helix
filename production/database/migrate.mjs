@@ -17,7 +17,9 @@ try {
   )`);
   await pool.query('select pg_advisory_lock(hashtext($1))', ['helix:migrations']);
   try {
-    const files = (await fs.readdir(migrationDir)).filter((name) => /^\\d{4}_.+\\.sql$/.test(name)).sort();
+    const files = (await fs.readdir(migrationDir))
+      .filter((name) => /^\\d{4}_.+\\.sql$/.test(name))
+      .sort();
     const applied = new Set((await pool.query('select filename from _helix_migrations')).rows.map((r) => r.filename));
     for (const filename of files) {
       if (applied.has(filename)) continue;

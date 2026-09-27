@@ -6,41 +6,77 @@
 <meta name="theme-color" content="#07090d">
 <title>OmniKali Desktop</title>
 <style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07090d;color:#eef2f7;font:14px system-ui}
-#screen{position:fixed;inset:0 0 56px;background:#090b10}
-#bar{position:fixed;z-index:20;left:0;right:0;bottom:0;min-height:48px;padding:6px max(8px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-bottom));display:flex;align-items:center;gap:7px;background:#0b0f16ee;border-top:1px solid #26303c;backdrop-filter:blur(12px)}
-button,a{min-height:38px;border:1px solid #2a3442;border-radius:10px;background:#111722;color:#eef2f7;padding:8px 11px;text-decoration:none;font:inherit;touch-action:manipulation}
+:root{color-scheme:dark}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07090d;color:#eef2f7;font:14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#screen{position:fixed;inset:0 0 112px;background:#090b10;touch-action:none}
+#bar{position:fixed;z-index:20;left:0;right:0;bottom:0;min-height:96px;padding:6px max(8px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-bottom));display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:#0b0f16f2;border-top:1px solid #26303c;backdrop-filter:blur(14px)}
+button,a{min-height:38px;box-sizing:border-box;border:1px solid #2a3442;border-radius:10px;background:#111722;color:#eef2f7;padding:7px 10px;text-decoration:none;font:inherit;touch-action:manipulation;user-select:none;-webkit-user-select:none}
 button:active,a:active{background:#1b2634}
-#status{margin-right:auto;color:#a9b5c4;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:90px}
-#ime{position:fixed;z-index:30;left:50%;bottom:64px;width:4px;height:4px;opacity:.02;border:0;padding:0;background:transparent;color:transparent;caret-color:transparent;transform:translateX(-50%)}
+button.key{min-width:42px;padding:7px 9px;font-weight:650}
+button.key.mod.active{background:#26415c;border-color:#6fa8dc;box-shadow:0 0 0 1px #6fa8dc55 inset}
+button.key.arrow{font-size:18px;line-height:1}
+#status{flex:1 1 150px;color:#a9b5c4;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:110px}
+#controls{display:flex;flex:1 1 100%;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:1px}
+#controls::-webkit-scrollbar{display:none}
+#keyboardHelp{display:none;position:fixed;z-index:25;left:8px;right:8px;bottom:120px;padding:9px 11px;border:1px solid #334052;border-radius:10px;background:#0b0f16ee;color:#c9d2de;font-size:12px;text-align:center;box-shadow:0 8px 28px #0008}
+#ime{position:fixed;z-index:30;left:50%;bottom:116px;width:8px;height:8px;opacity:.01;border:0;padding:0;background:transparent;color:transparent;caret-color:transparent;transform:translateX(-50%);pointer-events:none}
 #ime:focus{outline:none}
-#keyboardHelp{display:none;position:fixed;z-index:25;left:8px;right:8px;bottom:64px;padding:8px 10px;border:1px solid #334052;border-radius:10px;background:#0b0f16ee;color:#c9d2de;font-size:12px;text-align:center}
-@media(min-width:800px){#screen{inset:0}#bar{top:10px;bottom:auto;left:10px;right:auto;border:1px solid #26303c;border-radius:12px;min-height:0;padding:6px;background:#0b0f16cc}.mobileOnly{display:none}#ime{bottom:18px}}
+.mobileOnly{display:none}
+@media(max-width:799px){.mobileOnly{display:inline-flex}}
+@media(min-width:800px){
+ #screen{inset:0}
+ #bar{top:10px;bottom:auto;left:10px;right:auto;min-height:0;max-width:calc(100vw - 20px);border:1px solid #26303c;border-radius:12px;padding:6px;background:#0b0f16cc}
+ #controls{flex:0 1 auto;overflow:visible}
+ #ime{bottom:18px}
+}
 </style>
 </head>
 <body>
 <div id="screen"></div>
-<textarea id="ime" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" tabindex="-1" aria-label="Remote keyboard input"></textarea>
-<div id="keyboardHelp">Kali login: use the <b>kali</b> account. Set/reset its password from “Set Kali password”. Android keyboard is active.</div>
+<textarea id="ime" autocapitalize="sentences" autocomplete="off" autocorrect="off" spellcheck="false" tabindex="-1" aria-label="Remote keyboard input"></textarea>
+<div id="keyboardHelp">Mobile controls send real keyboard events to Kali. Tap Ctrl or Shift to latch them, then tap the key. Tap again to release.</div>
 <div id="bar">
-<span id="status">Connecting to Kali…</span>
-<button id="keyboard" class="mobileOnly">⌨ Keyboard</button>
-<button id="paste">Paste</button>
-<button id="cad">Ctrl-Alt-Del</button>
-<button id="fs">Fullscreen</button>
-<button id="reconnect">Reconnect</button>
-<a href="/setup/kali-password">Set Kali password</a><a href="/">Console</a>
+  <span id="status">Connecting to Kali…</span>
+  <button id="keyboard" class="mobileOnly">⌨ Keyboard</button>
+  <button id="paste">Paste</button>
+  <button id="cad">Ctrl-Alt-Del</button>
+  <button id="fs">Fullscreen</button>
+  <button id="reconnect">Reconnect</button>
+  <a href="/setup/kali-password">Set Kali password</a><a href="/">Console</a>
+  <div id="controls" aria-label="Remote keyboard controls">
+    <button class="key mod" data-key="Control" aria-label="Control">Ctrl</button>
+    <button class="key mod" data-key="Shift" aria-label="Shift">Shift</button>
+    <button class="key mod" data-key="Alt" aria-label="Alt">Alt</button>
+    <button class="key mod" data-key="Meta" aria-label="Super">Super</button>
+    <button class="key" data-key="Tab">Tab</button>
+    <button class="key" data-key="Escape">Esc</button>
+    <button class="key" data-key="Backspace">⌫</button>
+    <button class="key" data-key="Enter">Enter</button>
+    <button class="key" data-key="CapsLock">Caps</button>
+    <button class="key arrow" data-key="ArrowLeft" aria-label="Left arrow">←</button>
+    <button class="key arrow" data-key="ArrowUp" aria-label="Up arrow">↑</button>
+    <button class="key arrow" data-key="ArrowDown" aria-label="Down arrow">↓</button>
+    <button class="key arrow" data-key="ArrowRight" aria-label="Right arrow">→</button>
+    <button class="key" data-key="Home">Home</button>
+    <button class="key" data-key="End">End</button>
+    <button class="key" data-key="PageUp">PgUp</button>
+    <button class="key" data-key="PageDown">PgDn</button>
+    <button class="key" data-key="Delete">Del</button>
+  </div>
 </div>
 <script type="module">
 import RFB from '/novnc/core/rfb.js';
 import Keyboard from '/novnc/core/input/keyboard.js';
 import KeyTable from '/novnc/core/input/keysym.js';
 import keysyms from '/novnc/core/input/keysymdef.js';
+
 const id=__WORKSPACE_ID__;
 let rfb=null;
 let desktopKeyboard=null;
 let mobileKeyboard=false;
 let lastKeyboardInput='';
+let pendingAndroidBackspace=false;
+const modifierState=new Set();
 const status=document.getElementById('status');
 const screen=document.getElementById('screen');
 const ime=document.getElementById('ime');
@@ -48,63 +84,112 @@ const help=document.getElementById('keyboardHelp');
 const isMobile=matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const DEFAULT_INPUT_LEN=100;
 
+const KEYMAP={
+  Control:{keysym:KeyTable.XK_Control_L,code:'ControlLeft'},
+  Shift:{keysym:KeyTable.XK_Shift_L,code:'ShiftLeft'},
+  Alt:{keysym:KeyTable.XK_Alt_L,code:'AltLeft'},
+  Meta:{keysym:KeyTable.XK_Super_L,code:'MetaLeft'},
+  Tab:{keysym:KeyTable.XK_Tab,code:'Tab'},
+  Escape:{keysym:KeyTable.XK_Escape,code:'Escape'},
+  Backspace:{keysym:KeyTable.XK_BackSpace,code:'Backspace'},
+  Enter:{keysym:KeyTable.XK_Return,code:'Enter'},
+  CapsLock:{keysym:KeyTable.XK_Caps_Lock,code:'CapsLock'},
+  ArrowLeft:{keysym:KeyTable.XK_Left,code:'ArrowLeft'},
+  ArrowUp:{keysym:KeyTable.XK_Up,code:'ArrowUp'},
+  ArrowDown:{keysym:KeyTable.XK_Down,code:'ArrowDown'},
+  ArrowRight:{keysym:KeyTable.XK_Right,code:'ArrowRight'},
+  Home:{keysym:KeyTable.XK_Home,code:'Home'},
+  End:{keysym:KeyTable.XK_End,code:'End'},
+  PageUp:{keysym:KeyTable.XK_Page_Up,code:'PageUp'},
+  PageDown:{keysym:KeyTable.XK_Page_Down,code:'PageDown'},
+  Delete:{keysym:KeyTable.XK_Delete,code:'Delete'}
+};
+
+function sendKey(name,down){
+  const k=KEYMAP[name];
+  if(!rfb||!k)return;
+  try{rfb.sendKey(k.keysym,k.code,down)}catch{}
+}
+function releaseModifiers(){
+  for(const name of [...modifierState]){sendKey(name,false);modifierState.delete(name)}
+  document.querySelectorAll('#controls .mod.active').forEach(b=>b.classList.remove('active'));
+}
+function tapKey(name){
+  if(!rfb)return;
+  if(name==='Control'||name==='Shift'||name==='Alt'||name==='Meta'){
+    if(modifierState.has(name)){sendKey(name,false);modifierState.delete(name)}
+    else{sendKey(name,true);modifierState.add(name)}
+    const b=document.querySelector('[data-key="'+name+'"]');
+    b?.classList.toggle('active',modifierState.has(name));
+    return;
+  }
+  sendKey(name,true);
+  sendKey(name,false);
+  if(name==='CapsLock') status.textContent='Caps Lock sent';
+  if(modifierState.size){
+    releaseModifiers();
+  }
+}
 function keyboardInputReset(){
-  ime.value=new Array(DEFAULT_INPUT_LEN).join('_');
-  lastKeyboardInput=ime.value;
+  ime.value='';
+  lastKeyboardInput='';
 }
 function enableMobileInput(){
   mobileKeyboard=true;
-  if(!lastKeyboardInput) keyboardInputReset();
+  keyboardInputReset();
   ime.focus({preventScroll:true});
-  try{ime.setSelectionRange(ime.value.length,ime.value.length)}catch{}
   status.textContent='Android keyboard active';
+  help.textContent='Use the Android keyboard for text/case. The controls below send special keys to Kali.';
   help.style.display='block';
-  setTimeout(()=>help.style.display='none',2200);
+  setTimeout(()=>help.style.display='none',2400);
 }
 function sendMobileInput(event){
-  if(!rfb || !mobileKeyboard) return;
-  const newValue=event.target.value;
-  if(!lastKeyboardInput) keyboardInputReset();
-  const oldValue=lastKeyboardInput;
-  let newLen;
-  try{newLen=Math.max(event.target.selectionStart,newValue.length)}catch{newLen=newValue.length}
-  const oldLen=oldValue.length;
-  let inputs=newLen-oldLen;
-  let backspaces=inputs<0?-inputs:0;
-  for(let i=0;i<Math.min(oldLen,newLen);i++){
-    if(newValue.charAt(i)!==oldValue.charAt(i)){
-      inputs=newLen-i;
-      backspaces=oldLen-i;
-      break;
+  if(!rfb||!mobileKeyboard)return;
+  pendingAndroidBackspace=false;
+  const value=event.target.value||'';
+  const oldValue=lastKeyboardInput||'';
+  let first=0;
+  while(first<value.length&&first<oldValue.length&&value.charAt(first)===oldValue.charAt(first))first++;
+  if(value.length<oldValue.length){
+    for(let i=first;i<oldValue.length-value.length;i++)tapKey('Backspace');
+  }else if(value.length>oldValue.length){
+    for(let i=first;i<value.length;){
+      const cp=value.codePointAt(i);
+      const chars=String.fromCodePoint(cp);
+      const sym=keysyms.lookup(cp);
+      if(sym!=null){rfb.sendKey(sym,chars,true);rfb.sendKey(sym,chars,false)}
+      i+=chars.length;
     }
   }
-  for(let i=0;i<backspaces;i++) rfb.sendKey(KeyTable.XK_BackSpace,'Backspace');
-  for(let i=newLen-inputs;i<newLen;i++) rfb.sendKey(keysyms.lookup(newValue.charCodeAt(i)));
-  if(newLen>2*DEFAULT_INPUT_LEN){
-    keyboardInputReset();
-  }else if(newLen<1){
-    keyboardInputReset();
-    event.target.blur();
-    setTimeout(()=>event.target.focus(),0);
-  }else{
-    lastKeyboardInput=newValue;
-  }
+  keyboardInputReset();
 }
 function setupKeyboard(){
   if(isMobile){
     keyboardInputReset();
-    ime.addEventListener('input',sendMobileInput);
-    ime.addEventListener('keydown',e=>{
-      if(!mobileKeyboard) return;
-      if(e.key==='Enter' || e.code==='Enter'){
-        e.preventDefault();rfb?.sendKey(KeyTable.XK_Return,'Enter');keyboardInputReset();
-      }else if(e.key==='Tab' || e.code==='Tab'){
-        e.preventDefault();rfb?.sendKey(KeyTable.XK_Tab,'Tab');keyboardInputReset();
-      }else if(e.key==='Escape' || e.code==='Escape'){
-        e.preventDefault();rfb?.sendKey(KeyTable.XK_Escape,'Escape');keyboardInputReset();
-      }
-    });
-  }else{
+    if(!ime.dataset.bound){
+      ime.dataset.bound='1';
+      ime.addEventListener('input',sendMobileInput);
+      ime.addEventListener('keydown',e=>{
+        if(!mobileKeyboard||!rfb)return;
+        if(e.key==='Backspace'||e.code==='Backspace'){
+          pendingAndroidBackspace=true;
+          setTimeout(()=>{
+            if(pendingAndroidBackspace){
+              pendingAndroidBackspace=false;
+              tapKey('Backspace');
+              keyboardInputReset();
+            }
+          },0);
+          return;
+        }
+        if(e.key==='Enter'||e.code==='Enter'||e.key==='Tab'||e.code==='Tab'||e.key==='Escape'||e.code==='Escape'){
+          e.preventDefault();
+          tapKey(e.key==='Enter'?'Enter':e.key==='Tab'?'Tab':'Escape');
+          keyboardInputReset();
+        }
+      });
+    }
+  }else if(!desktopKeyboard){
     desktopKeyboard=new Keyboard(screen);
     desktopKeyboard.onkeyevent=(keysym,code,down)=>{if(rfb)rfb.sendKey(keysym,code,down)};
     desktopKeyboard.grab();
@@ -114,30 +199,49 @@ async function paste(){
   try{const text=await navigator.clipboard.readText();if(text&&rfb){rfb.clipboardPasteFrom(text);status.textContent='Pasted into Kali'}}catch{status.textContent='Clipboard permission denied'}
 }
 function connect(){
- if(rfb){try{rfb.disconnect()}catch{}}
- status.textContent='Requesting desktop ticket…';
- fetch('/api/v1/workspaces/'+encodeURIComponent(id),{cache:'no-store'}).then(async r=>{
-   if(r.status===401){location.href='/auth/login';return null}
-   if(!r.ok)throw Error('workspace unavailable');
-   return r.json();
- }).then(x=>{
-   if(!x)return;
-   if(x.status!=='running'){status.textContent='Starting Kali…';setTimeout(connect,1200);return}
-   const scheme=location.protocol==='https:'?'wss':'ws';
-   rfb=new RFB(screen,scheme+'://'+location.host+x.streamPath+'?ticket='+encodeURIComponent(x.ticket));
-   rfb.scaleViewport=true;rfb.resizeSession=false;rfb.clipViewport=false;rfb.focusOnClick=!isMobile;rfb.viewOnly=false;
-   rfb.addEventListener('connect',()=>{status.textContent='Kali Rolling · connected';setupKeyboard();if(isMobile)enableMobileInput()});
-   rfb.addEventListener('disconnect',()=>status.textContent='Desktop disconnected');
-   rfb.addEventListener('securityfailure',()=>status.textContent='Desktop security handshake failed');
- }).catch(e=>status.textContent=e.message||'Connection failed');
+  releaseModifiers();
+  if(rfb){try{rfb.disconnect()}catch{}}
+  status.textContent='Requesting desktop ticket…';
+  fetch('/api/v1/workspaces/'+encodeURIComponent(id),{cache:'no-store'}).then(async r=>{
+    if(r.status===401){location.href='/auth/login';return null}
+    if(!r.ok)throw Error('workspace unavailable');
+    return r.json();
+  }).then(x=>{
+    if(!x)return;
+    if(x.status!=='running'){status.textContent='Starting Kali…';setTimeout(connect,1200);return}
+    const scheme=location.protocol==='https:'?'wss':'ws';
+    rfb=new RFB(screen,scheme+'://'+location.host+x.streamPath+'?ticket='+encodeURIComponent(x.ticket));
+    rfb.scaleViewport=true;
+    rfb.resizeSession=false;
+    rfb.clipViewport=false;
+    rfb.focusOnClick=!isMobile;
+    rfb.viewOnly=false;
+    rfb.addEventListener('connect',()=>{status.textContent='Kali Rolling · connected';setupKeyboard();if(isMobile)enableMobileInput()});
+    rfb.addEventListener('disconnect',()=>{releaseModifiers();status.textContent='Desktop disconnected'});
+    rfb.addEventListener('securityfailure',()=>status.textContent='Desktop security handshake failed');
+  }).catch(e=>status.textContent=e.message||'Connection failed');
 }
+
 document.getElementById('keyboard').onclick=enableMobileInput;
 document.getElementById('paste').onclick=paste;
-document.getElementById('cad').onclick=()=>rfb?.sendCtrlAltDel();
+document.getElementById('cad').onclick=()=>{releaseModifiers();rfb?.sendCtrlAltDel()};
 document.getElementById('fs').onclick=()=>document.documentElement.requestFullscreen?.();
 document.getElementById('reconnect').onclick=connect;
+document.querySelectorAll('#controls [data-key]').forEach(button=>{
+  const name=button.dataset.key;
+  button.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    if(name==='CapsLock'||!['Control','Shift','Alt','Meta'].includes(name))tapKey(name);
+    else tapKey(name);
+    if(mobileKeyboard)ime.focus({preventScroll:true});
+  });
+});
 screen.addEventListener('click',()=>{if(!isMobile)rfb?.focus()});
 screen.addEventListener('touchstart',()=>{if(!isMobile)rfb?.focus()},{passive:true});
+window.addEventListener('blur',releaseModifiers);
+window.addEventListener('pagehide',releaseModifiers);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseModifiers()});
+
 if('modelContext'in document){try{document.modelContext.registerTool({name:'focus_omnikali_keyboard',description:'Focus the mobile browser keyboard so text and Enter can be sent to the authenticated OmniKali desktop.',inputSchema:{type:'object',properties:{},additionalProperties:false},execute:async()=>{enableMobileInput();return{status:'ready'}}})}catch{}}
 connect();
 </script>

@@ -24,6 +24,8 @@ const REDIRECT_URI = process.env.OIDC_REDIRECT_URI || "";
 const PUBLIC_ORIGIN = process.env.HELIX_PUBLIC_ORIGIN || "";
 const SESSION_SECRET = process.env.SESSION_SIGNING_SECRET || "";
 const HYPERVISOR = process.env.HELIX_HYPERVISOR_URL || "http://127.0.0.1:8090";
+const AGENT_BRIDGE = process.env.HELIX_AGENT_BRIDGE_URL || "http://127.0.0.1:8093";
+const MCP_BRIDGE = process.env.HELIX_MCP_BRIDGE_URL || "http://127.0.0.1:8094";
 const SESSION_TTL = Number(process.env.SESSION_TTL_SECONDS || 3600);
 const WS_TTL = Number(process.env.WS_TICKET_TTL_SECONDS || 60);
 const COOKIE = "helix_session";
@@ -64,7 +66,7 @@ async function login(req,res,u){
   if(u.searchParams.has("provider")) return startLogin(req,res,u);
   return authLoginPage(req,res);
 }
-async function callback(req,res,u){const ck=parseCookies(req),state=u.searchParams.get("state"),code=u.searchParams.get("code");if(!state||!ck[STATE_COOKIE]||state.length!==ck[STATE_COOKIE].length||!timingSafeEqual(Buffer.from(state),Buffer.from(ck[STATE_COOKIE]))) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"invalid oauth state"}); }if(!code) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"missing authorization code"}); }const c=await discovery(),tr=await fetch(c.token_endpoint,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:REDIRECT_URI,client_id:CLIENT_ID,client_secret:CLIENT_SECRET})});if(!tr.ok){const detail=await tr.text();console.error("[helix-gateway] OIDC token exchange failed",tr.status,detail.slice(0,1000));return json(res,502,{error:"oidc token exchange failed"});}const t=await tr.json();if(!t.id_token)return json(res,502,{error:"no id_token"});jwks ||= createRemoteJWKSet(new URL(c.jwks_uri));const {payload}=await jwtVerify(t.id_token,jwks,{issuer:ISSUER,audience:CLIENT_ID});if(!payload.nonce||!ck[NONCE_COOKIE]||payload.nonce!==ck[NONCE_COOKIE])return json(res,400,{error:"invalid oidc nonce"});const s=await sign({sub:String(payload.sub),email:payload.email||null,name:payload.name||null},SESSION_TTL);res.writeHead(302,{"cache-control":"no-store, no-cache, must-revalidate","pragma":"no-cache",location:ck.helix_return_to==="omnikali"?"/omnikali/authorize":"/","set-cookie":[clearCookie("helix_return_to"),cookie(COOKIE,s,SESSION_TTL),clearCookie(STATE_COOKIE),clearCookie(NONCE_COOKIE)]});res.end()}
+async function callback(req,res,u){const ck=parseCookies(req),state=u.searchParams.get("state"),code=u.searchParams.get("code");if(ck.helix_mcp_bridge && state===ck.helix_mcp_bridge){const qp=new URLSearchParams([...u.searchParams.entries()]);qp.set("iss",PUBLIC_ORIGIN);const target=PUBLIC_ORIGIN+"/mcp/oauth/cognito-callback?"+qp;res.writeHead(302,{"cache-control":"no-store","location":target,"set-cookie":"helix_mcp_bridge=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0"});return res.end();}if(!state||!ck[STATE_COOKIE]||state.length!==ck[STATE_COOKIE].length||!timingSafeEqual(Buffer.from(state),Buffer.from(ck[STATE_COOKIE]))) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"invalid oauth state"}); }if(!code) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"missing authorization code"}); }const c=await discovery(),tr=await fetch(c.token_endpoint,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:REDIRECT_URI,client_id:CLIENT_ID,client_secret:CLIENT_SECRET})});if(!tr.ok){const detail=await tr.text();console.error("[helix-gateway] OIDC token exchange failed",tr.status,detail.slice(0,1000));return json(res,502,{error:"oidc token exchange failed"});}const t=await tr.json();if(!t.id_token)return json(res,502,{error:"no id_token"});jwks ||= createRemoteJWKSet(new URL(c.jwks_uri));const {payload}=await jwtVerify(t.id_token,jwks,{issuer:ISSUER,audience:CLIENT_ID});if(!payload.nonce||!ck[NONCE_COOKIE]||payload.nonce!==ck[NONCE_COOKIE])return json(res,400,{error:"invalid oidc nonce"});const s=await sign({sub:String(payload.sub),email:payload.email||null,name:payload.name||null},SESSION_TTL);res.writeHead(302,{"cache-control":"no-store, no-cache, must-revalidate","pragma":"no-cache",location:ck.helix_return_to==="omnikali"?"/omnikali/authorize":"/","set-cookie":[clearCookie("helix_return_to"),cookie(COOKIE,s,SESSION_TTL),clearCookie(STATE_COOKIE),clearCookie(NONCE_COOKIE)]});res.end()}
 async function hv(path,opts){const r=await fetch(HYPERVISOR+path,opts);const t=await r.text();let b;try{b=JSON.parse(t)}catch{b={raw:t}}return{status:r.status,body:b}}
 async function desktop(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(302,{location:"/auth/login"});return res.end()}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});res.setHeader("cache-control","no-store, no-cache, must-revalidate");const file=readFileSync("/opt/helix/production/gateway/desktop.html","utf8");return html(res,200,file.replace("__WORKSPACE_ID__",JSON.stringify(id)))}
 async function workspace(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(401);return res.end("unauthorized")}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});let d=await hv("/domains/"+encodeURIComponent(id));if(d.status!==200)return json(res,d.status,{error:"workspace not found"});if(d.body.owner && d.body.owner!==s.sub)return json(res,403,{error:"workspace not authorized"});
@@ -79,25 +81,65 @@ async function taskControl(){
   if(!taskControlPromise){
     taskControlPromise=(async()=>{
       const store=new TaskStateStore();
-      const runner=new TaskRunner({store,workerId:process.env.OMNIKALI_WORKER_ID || ('gateway-'+randomBytes(12).toString('hex')),executors:{kali:createAgentExecutor({})},heartbeatSeconds:Number(process.env.TASK_HEARTBEAT_SECONDS || 15)});
-      const dispatch=createTaskDispatch({store,runner,workspaceExists:async id=>(await hv('/domains/'+encodeURIComponent(id))).status===200});
-      const worker=new TaskWorker({runner,intervalMs:Number(process.env.TASK_WORKER_INTERVAL_MS || 1000)}); worker.start();
-      return {store,runner,dispatch,worker};
+      const executor=createAgentExecutor({});
+      const runner=new TaskRunner({
+        store,
+        workerId:process.env.OMNIKALI_WORKER_ID || ('gateway-'+randomBytes(12).toString('hex')),
+        executors:{kali:executor},
+        heartbeatSeconds:Number(process.env.TASK_HEARTBEAT_SECONDS || 15)
+      });
+      const dispatch=createTaskDispatch({
+        store,runner,
+        workspaceExists:async id=>{
+          const r=await hv("/domains/"+encodeURIComponent(id));
+          return r.status===200;
+        }
+      });
+      const worker=new TaskWorker({runner,intervalMs:Number(process.env.TASK_WORKER_INTERVAL_MS || 1000)});
+      worker.start();
+      return {store,runner,dispatch,worker,executors:{kali:executor}};
     })().catch(error=>{taskControlPromise=null;throw error});
   }
   return taskControlPromise;
 }
 async function taskSubmit(req,res){
   const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
-  const b=await requestBody(req), taskId=String(b.task_id||""), target=String(b.target||""), idempotencyKey=String(b.idempotency_key||""), payload=b.payload===undefined?{}:b.payload, workspaceId=b.workspace_id==null?null:String(b.workspace_id);
+  const b=await requestBody(req);
+  const taskId=String(b.task_id||"");
+  const target=String(b.target||"");
+  const idempotencyKey=String(b.idempotency_key||"");
+  const payload=b.payload===undefined?{}:b.payload;
+  const workspaceId=b.workspace_id==null?null:String(b.workspace_id);
   if(!/^[0-9a-fA-F-]{36}$/.test(taskId))return json(res,400,{error:"task_id must be a UUID"});
   if(!target)return json(res,400,{error:"target is required"});
   if(!idempotencyKey)return json(res,400,{error:"idempotency_key is required"});
-  if(workspaceId){const d=await hv("/domains/"+encodeURIComponent(workspaceId));if(d.status!==200)return json(res,404,{error:"workspace not found"});if(d.body.owner!==s.sub)return json(res,403,{error:"workspace not authorized"});}
-  try{const c=await taskControl();const task=await c.dispatch({taskId,target,payload,idempotencyKey,workspaceId});return json(res,202,{task_id:task.task_id,state:task.state,target:task.target,workspace_id:task.workspace_id,idempotency_key:task.idempotency_key});}
-  catch(e){if(/idempotency_key already exists/.test(e.message||""))return json(res,409,{error:e.message});if(e.statusCode)return json(res,e.statusCode,{error:e.message});console.error("[helix-gateway] task dispatch failed",e);return json(res,500,{error:"task dispatch failed"});}
+  if(workspaceId){
+    const d=await hv("/domains/"+encodeURIComponent(workspaceId));
+    if(d.status!==200)return json(res,404,{error:"workspace not found"});
+    if(d.body.owner!==s.sub)return json(res,403,{error:"workspace not authorized"});
+  }
+  try{
+    const c=await taskControl();
+    const task=await c.dispatch({taskId,target,payload,idempotencyKey,workspaceId});
+    return json(res,202,{task_id:task.task_id,state:task.state,target:task.target,workspace_id:task.workspace_id,idempotency_key:task.idempotency_key});
+  }catch(e){
+    if(/idempotency_key already exists/.test(e.message||""))return json(res,409,{error:e.message});
+    if(e.statusCode)return json(res,e.statusCode,{error:e.message});
+    console.error("[helix-gateway] task dispatch failed",e);
+    return json(res,500,{error:"task dispatch failed"});
+  }
 }
 async function requestBody(req){return new Promise((resolve,reject)=>{const chunks=[];req.on("data",x=>chunks.push(x));req.on("end",()=>{try{resolve(chunks.length?JSON.parse(Buffer.concat(chunks)):{});}catch(e){reject(e)}});req.on("error",reject)})}
+async function agentProxy(req,res,u){
+  const target=AGENT_BRIDGE+u.pathname.replace(/^\/agent/,"")+(u.search||"");
+  const headers={"content-type":req.headers["content-type"]||"application/json"};
+  if(req.headers.authorization) headers.authorization=req.headers.authorization;
+  const body=req.method==="GET"||req.method==="HEAD"?undefined:await new Promise((resolve,reject)=>{const c=[];req.on("data",x=>c.push(x));req.on("end",()=>resolve(Buffer.concat(c)));req.on("error",reject)});
+  const r=await fetch(target,{method:req.method,headers,body});
+  const t=await r.text();
+  res.writeHead(r.status,{"content-type":r.headers.get("content-type")||"application/json","cache-control":"no-store"});
+  res.end(t);
+}
 async function forgotCloudPassword(req,res){
   if(!configured()) return html(res,503,"<h1>OmniKali Cloud</h1><p>Authentication is not configured.</p>");
   const c=await discovery();
@@ -156,6 +198,7 @@ const server=createServer(async (req,res)=>{
   try {
     const u=new URL(req.url||"/","http://"+HOST+":"+PORT);
     if(await omniKaliHandoff(req,res,u)) return;
+    if(u.pathname.startsWith("/agent/")) return agentProxy(req,res,u);
     if(req.method==="GET" && u.pathname==="/acceptance") {
       const s=await session(req); if(!s){res.writeHead(302,{location:"/auth/login"});return res.end()}
       return html(res,200,readFileSync("/opt/helix/production/gateway/acceptance.html","utf8"));
@@ -179,6 +222,27 @@ const server=createServer(async (req,res)=>{
       return res.end();
     }
     if(req.method==="POST" && u.pathname==="/api/v1/tasks") return taskSubmit(req,res);
+    if(req.method==="POST" && u.pathname.match(/^\/api\/v1\/tasks\/[0-9a-fA-F-]{36}\/cancel$/)) {
+      const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
+      const id=u.pathname.split("/")[4], c=await taskControl(), task=await c.store.getTask(id);
+      if(!task)return json(res,404,{error:"task not found"});
+      if(task.workspace_id){const d=await hv("/domains/"+encodeURIComponent(task.workspace_id));if(d.status!==200 || d.body.owner!==s.sub)return json(res,403,{error:"task not authorized"});}
+      const requested=await c.store.requestCancellation(id,s.sub);
+      if(!requested.accepted)return json(res,200,{task_id:id,state:requested.task.state,cancellation:"already_terminal"});
+      let cancellation={acknowledged:false};
+      if(requested.task.state==="RUNNING" && task.target==="kali") {
+        const executor=c.executors.kali;
+        if(typeof executor.cancelOperation==="function") {
+          try {
+            cancellation=await executor.cancelOperation(task.idempotency_key);
+            if(cancellation.acknowledged) await c.store.acknowledgeCancellation(id,"agent");
+          } catch (error) {
+            cancellation={acknowledged:false,error_code:error?.code || "CANCELLATION_DELIVERY_FAILED"};
+          }
+        }
+      }
+      return json(res,202,{task_id:id,state:requested.task.state,cancel_requested_at:requested.task.cancel_requested_at,cancel_acknowledged_at:cancellation.acknowledged?new Date().toISOString():null,cancellation});
+    }
     if(req.method==="GET" && u.pathname.match(/^\/api\/v1\/acceptance\/tasks\/[0-9a-fA-F-]{36}$/)) {
       const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
       const id=u.pathname.split("/").pop(), c=await taskControl(), task=await c.store.getTask(id);

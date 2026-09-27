@@ -1,0 +1,49 @@
+openapi: 3.0.3
+info:
+  title: OmniKali Remote Agent
+  version: 1.0.0
+servers:
+  - url: https://omnikali-workstation.iancossette73.chatgpt.site/agent
+paths:
+  /execute:
+    post:
+      operationId: executeOnWorkstation
+      summary: Execute a shell command on the owner's Kali workstation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                operation_key: {type: string}
+                command: {type: string}
+                cwd: {type: string, default: /root}
+                timeout: {type: integer, default: 300, maximum: 900}
+      responses:
+        "200": {description: Command result}
+  /cancel:
+    post:
+      operationId: cancelOnWorkstation
+      summary: Request cancellation of an active workstation operation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operation_key]
+              properties:
+                operation_key: {type: string}
+      responses:
+        "200": {description: Cancellation acknowledgement or inactive operation}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

@@ -13,8 +13,10 @@
   "dependencies": {
     "@modelcontextprotocol/client": "^2.1.0",
     "@modelcontextprotocol/server": "^2.1.0",
+    "@novnc/novnc": "^1.7.0",
     "ioredis": "^5.11.1",
     "pg": "^8.23.0",
+    "ws": "^8.21.3",
     "zod": "^4.6.5"
   }
 }

@@ -18,27 +18,45 @@ export class TaskRunner {
       await this.store.fail(task.task_id, this.workerId, { code: 'UNSUPPORTED_TARGET', message: `No executor for target: ${task.target}` });
       return { taskId: task.task_id, state: 'FAILED', reason: 'UNSUPPORTED_TARGET' };
     }
+
+    if (task.cancel_requested_at) {
+      const failure = { code: 'CANCELLATION_REQUESTED', message: 'Task was cancelled before executor dispatch' };
+      await this.store.fail(task.task_id, this.workerId, failure);
+      return { taskId: task.task_id, state: 'FAILED', error: failure };
+    }
+
     let heartbeatError = null;
     const heartbeat = setInterval(async () => {
       try { await this.store.heartbeat(task.task_id, this.workerId); }
       catch (error) { heartbeatError = error; this.logger.error?.('[omnikali-runner] heartbeat failed', error); }
     }, this.heartbeatMs);
     heartbeat.unref?.();
+
     try {
       const result = await executor(task);
+      if (result?.canceled && task.cancel_requested_at) {
+        await this.store.acknowledgeCancellation(task.task_id, 'executor');
+      }
       if (heartbeatError) throw new Error(`heartbeat lost: ${heartbeatError.message}`);
       const completed = await this.store.complete(task.task_id, this.workerId, result);
       return { taskId: task.task_id, state: completed.state, result: completed.result ?? result };
     } catch (error) {
       const failure = { code: error?.code || 'EXECUTION_FAILED', message: error?.message || String(error) };
-      try { await this.store.fail(task.task_id, this.workerId, failure); }
-      catch (fenceError) { this.logger.error?.('[omnikali-runner] completion/failure fencing rejected', fenceError); }
+      try {
+        await this.store.fail(task.task_id, this.workerId, failure);
+      } catch (fenceError) {
+        this.logger.error?.('[omnikali-runner] completion/failure fencing rejected', fenceError);
+      }
       return { taskId: task.task_id, state: 'FAILED', error: failure };
-    } finally { clearInterval(heartbeat); }
+    } finally {
+      clearInterval(heartbeat);
+    }
   }
 }
 
 export function createCommandExecutors({ execute }) {
   if (typeof execute !== 'function') throw new Error('execute is required');
-  return { kali: task => execute(task.payload) };
+  return {
+    kali: task => execute(task.payload),
+  };
 }
