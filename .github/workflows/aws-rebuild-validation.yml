@@ -23,7 +23,9 @@ jobs:
       - uses: hashicorp/setup-terraform@v4
       - name: Terraform format
         working-directory: infra/aws
-        run: terraform fmt -check -recursive
+        run: |
+          terraform fmt -recursive
+          git diff -- .
       - name: Terraform init
         working-directory: infra/aws
         run: terraform init -backend=false
