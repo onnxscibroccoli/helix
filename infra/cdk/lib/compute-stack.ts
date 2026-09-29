@@ -67,8 +67,8 @@ export class ComputeStack extends cdk.Stack {
       subnetId: subnet.subnetId,
       securityGroupIds: [props.network.gatewaySecurityGroup.securityGroupId],
       launchTemplate: {
-        launchTemplateId: launchTemplate.ref,
-        version: launchTemplate.attrLatestVersionNumber,
+        launchTemplateId: launchTemplate.launchTemplateId,
+        version: launchTemplate.latestVersionNumber,
       },
       tags: [
         { key: "Name", value: `${props.name}-hypervisor` },
