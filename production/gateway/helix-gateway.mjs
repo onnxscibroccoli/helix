@@ -9,6 +9,7 @@ import { createConnection } from "node:net";
 import { createRequire } from "node:module";
 import { readFileSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
+import { putDesktopCapability, consumeDesktopCapability, desktopCapabilityStoreMode } from "./desktop-capability-store.mjs";
 
 const HOST = process.env.GATEWAY_HOST || "127.0.0.1";
 const PORT = Number(process.env.GATEWAY_PORT || 8092);
@@ -30,7 +31,6 @@ const NONCE_COOKIE = "helix_oidc_nonce";
 if (!SESSION_SECRET) throw new Error("SESSION_SIGNING_SECRET is required");
 const key = new TextEncoder().encode(SESSION_SECRET);
 let oidcConfigPromise, jwks;
-const desktopCapabilities = new Map();
 const b64url = b => b.toString("base64url");
 function parseCookies(req){return Object.fromEntries((req.headers.cookie||"").split(";").map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf("=");return[x.slice(0,i),decodeURIComponent(x.slice(i+1))]}))}
 function cookie(n,v,max,secure=true){return n+"="+encodeURIComponent(v)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age="+max+(secure?"; Secure":"")}
@@ -64,10 +64,8 @@ async function login(req,res,u){
 async function callback(req,res,u){const ck=parseCookies(req),state=u.searchParams.get("state"),code=u.searchParams.get("code");if(!state||!ck[STATE_COOKIE]||state.length!==ck[STATE_COOKIE].length||!timingSafeEqual(Buffer.from(state),Buffer.from(ck[STATE_COOKIE]))) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"invalid oauth state"}); }if(!code) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"missing authorization code"}); }const c=await discovery(),tr=await fetch(c.token_endpoint,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:REDIRECT_URI,client_id:CLIENT_ID,client_secret:CLIENT_SECRET})});if(!tr.ok){const detail=await tr.text();console.error("[helix-gateway] OIDC token exchange failed",tr.status,detail.slice(0,1000));return json(res,502,{error:"oidc token exchange failed"});}const t=await tr.json();if(!t.id_token)return json(res,502,{error:"no id_token"});jwks ||= createRemoteJWKSet(new URL(c.jwks_uri));const {payload}=await jwtVerify(t.id_token,jwks,{issuer:ISSUER,audience:CLIENT_ID});if(!payload.nonce||!ck[NONCE_COOKIE]||payload.nonce!==ck[NONCE_COOKIE])return json(res,400,{error:"invalid oidc nonce"});const s=await sign({sub:String(payload.sub),email:payload.email||null,name:payload.name||null},SESSION_TTL);res.writeHead(302,{"cache-control":"no-store, no-cache, must-revalidate","pragma":"no-cache",location:ck.helix_return_to==="omnikali"?"/omnikali/authorize":"/","set-cookie":[clearCookie("helix_return_to"),cookie(COOKIE,s,SESSION_TTL),clearCookie(STATE_COOKIE),clearCookie(NONCE_COOKIE)]});res.end()}
 async function hv(path,opts){const r=await fetch(HYPERVISOR+path,opts);const t=await r.text();let b;try{b=JSON.parse(t)}catch{b={raw:t}}return{status:r.status,body:b}}
 async function redeemDesktopCapability(req,res,capability){
-  const grant=desktopCapabilities.get(capability);
+  const grant=await consumeDesktopCapability(capability);
   if(!grant){return json(res,401,{error:"invalid or already-used desktop capability"});}
-  desktopCapabilities.delete(capability);
-  if(grant.expiresAt<=Date.now()) return json(res,401,{error:"desktop capability expired"});
   const d=await hv("/domains/"+encodeURIComponent(grant.workspace));
   if(d.status!==200||d.body.owner!==grant.owner||d.body.status!=="running"||d.body.display==null) return json(res,409,{error:"workspace is not ready"});
   const s=await sign({sub:grant.owner,workspace:grant.workspace,kind:"desktop"},WS_TTL);
@@ -108,7 +106,7 @@ async function agentSession(req,res){
   if(d.body.status!=="running") return json(res,202,{workspaceId:id,status:d.body.status,operationId:id});
   if(d.body.display==null) return json(res,202,{workspaceId:id,status:"booting",operationId:id});
   const capability= b64url(randomBytes(32));
-  desktopCapabilities.set(capability,{owner,workspace:id,expiresAt:Date.now()+WS_TTL*1000});
+  await putDesktopCapability(capability,{owner,workspace:id});
   return json(res,200,{session_url:PUBLIC_ORIGIN+"/desktop/capability/"+capability,workspaceId:id,status:d.body.status,streamPath:"/kasm/ws/"+id,expiresIn:WS_TTL});
 }
 async function requestBody(req){return new Promise((resolve,reject)=>{const chunks=[];req.on("data",x=>chunks.push(x));req.on("end",()=>{try{resolve(chunks.length?JSON.parse(Buffer.concat(chunks)):{});}catch(e){reject(e)}});req.on("error",reject)})}
