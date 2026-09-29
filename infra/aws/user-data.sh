@@ -3,6 +3,32 @@ set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
+# Preserve host recovery capacity while the nested Kali guest is running.
+if ! swapon --show | grep -q '^/swapfile '; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+fi
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+install -d -m 0755 /etc/systemd/system/paperclip.service.d /etc/systemd/system/helix-gateway.service.d
+cat >/etc/systemd/system/paperclip.service.d/10-memory.conf <<'EOF'
+[Service]
+MemoryHigh=900M
+MemoryMax=1200M
+Restart=on-failure
+RestartSec=5s
+EOF
+cat >/etc/systemd/system/helix-gateway.service.d/10-memory.conf <<'EOF'
+[Service]
+MemoryHigh=600M
+MemoryMax=800M
+Restart=always
+RestartSec=3s
+EOF
+systemctl daemon-reload
+
 apt-get install -y qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients virtinst bridge-utils ovmf nginx git curl ca-certificates nodejs npm python3-venv cpu-checker util-linux
 
 # AWS Ubuntu AMIs normally ship with SSM Agent. Keep provisioning deterministic
