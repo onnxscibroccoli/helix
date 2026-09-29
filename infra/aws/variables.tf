@@ -18,3 +18,9 @@ variable "cognito_client_id" {
   type    = string
   default = ""
 }
+
+variable "helix_repo_url" { type = string default = "https://github.com/onnxscibroccoli/helix.git" }
+variable "helix_source_ref" {
+  type = string
+  validation { condition = can(regex("^[0-9a-f]{40}$", var.helix_source_ref)) error_message = "helix_source_ref must be an immutable 40-character commit SHA." }
+}
