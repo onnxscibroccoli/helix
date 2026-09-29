@@ -19,7 +19,6 @@ export class PlatformNetworkStack extends cdk.Stack {
       vpcName: `${props.name}-vpc`,
       ipAddresses: ec2.IpAddresses.cidr("10.42.0.0/16"),
       availabilityZones: ["us-east-1a", "us-east-1b"],
-      maxAzs: 2,
       natGateways: 0,
       subnetConfiguration: [
         { name: "public", subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
