@@ -1,2 +1,20 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";\n\nconst required = [\n  ["POST /api/v1/sessions", "server-to-server launch"],\n  ["HELIX_AGENT_API_SECRET", "agent authentication"],\n  ["workspaceId", "idempotency key"],\n  ["persistent", "persistent tier"],\n  ["ephemeral", "ephemeral tier"],\n  ["session_url", "desktop capability"],\n  ["/kasm/ws/", "authenticated desktop stream"],\n];\n\nconst source = await readFile(new URL("./helix-gateway.mjs", import.meta.url), "utf8");\nfor (const [needle, meaning] of required) assert.ok(source.includes(needle), `missing ${meaning}: ${needle}`);\nassert.ok(source.includes('return json(res,401,{error:"unauthorized"})'));\nassert.ok(source.includes('return json(res,409,{error:"workspace belongs to another owner"})'));\nassert.ok(source.includes('return json(res,202,{workspaceId:id,status:d.body.status,operationId:id})'));\nassert.ok(source.includes('return json(res,200,{session_url:PUBLIC_ORIGIN'));\nconsole.log("agent-session-contract: source contract checks passed");
+import { readFile } from "node:fs/promises";
+
+const required = [
+  ["POST /api/v1/sessions", "server-to-server launch"],
+  ["HELIX_AGENT_API_SECRET", "agent authentication"],
+  ["workspaceId", "idempotency key"],
+  ["persistent", "persistent tier"],
+  ["ephemeral", "ephemeral tier"],
+  ["session_url", "desktop capability"],
+  ["/kasm/ws/", "authenticated desktop stream"],
+];
+
+const source = await readFile(new URL("./helix-gateway.mjs", import.meta.url), "utf8");
+for (const [needle, meaning] of required) assert.ok(source.includes(needle), `missing ${meaning}: ${needle}`);
+assert.ok(source.includes('return json(res,401,{error:"unauthorized"})'));
+assert.ok(source.includes('return json(res,409,{error:"workspace belongs to another owner"})'));
+assert.ok(source.includes('return json(res,202,{workspaceId:id,status:d.body.status,operationId:id})'));
+assert.ok(source.includes('return json(res,200,{session_url:PUBLIC_ORIGIN'));
+console.log("agent-session-contract: source contract checks passed");
