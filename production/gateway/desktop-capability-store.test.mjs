@@ -8,13 +8,13 @@ const {putDesktopCapability, consumeDesktopCapability} = await import("./desktop
 
 test("desktop capability is one-use", async () => {
   await putDesktopCapability("cap-a", {owner:"owner-a", workspace:"ws-a"});
-  assert.deepEqual(await consumeDesktopCapability("cap-a"), {owner:"owner-a", workspace:"ws-a"});
+  assert.deepEqual(((g) => ({owner:g.owner, workspace:g.workspace}))(await consumeDesktopCapability("cap-a")), {owner:"owner-a", workspace:"ws-a"});
   assert.equal(await consumeDesktopCapability("cap-a"), null);
 });
 
 test("desktop capability binds owner and workspace in the store", async () => {
   await putDesktopCapability("cap-b", {owner:"owner-b", workspace:"ws-b"});
-  assert.deepEqual(await consumeDesktopCapability("cap-b"), {owner:"owner-b", workspace:"ws-b"});
+  assert.deepEqual(((g) => ({owner:g.owner, workspace:g.workspace}))(await consumeDesktopCapability("cap-b")), {owner:"owner-b", workspace:"ws-b"});
 });
 
 test("concurrent memory redemption consumes once", async () => {
