@@ -9,9 +9,12 @@ const MAIN = path.join(ROOT, "infra/aws/main.tf");
 const USERDATA = path.join(ROOT, "infra/aws/user-data.sh");
 const README = path.join(ROOT, "infra/aws/README.md");
 
-test("Helix AWS rebuild uses user_data, not SSM Association", () => {
+test("Helix AWS rebuild uses immutable user_data, not SSM Association", () => {
   const tf = fs.readFileSync(MAIN, "utf8");
-  assert.match(tf, /user_data\s*=\s*file\("\$\{path\.module\}\/user-data\.sh"\)/);
+  assert.match(tf, /user_data\s*=\s*replace\s*\(\s*replace\s*\(file\("\$\{path\.module\}\/user-data\.sh"\)/s);
+  assert.match(tf, /"__HELIX_REPO_URL__"/);
+  assert.match(tf, /"__HELIX_SOURCE_REF__"/);
+  assert.match(tf, /user_data_replace_on_change\s*=\s*true/);
   assert.doesNotMatch(tf, /AWS::SSM::Association/);
   assert.doesNotMatch(tf, /aws_ssm_association/);
   assert.match(tf, /AmazonSSMManagedInstanceCore/);
