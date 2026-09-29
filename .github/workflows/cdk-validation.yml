@@ -24,6 +24,7 @@ jobs:
       OMNIKALI_GITHUB_REF: "refs/heads/main"
       OMNIKALI_NAME: "helix"
       OMNIKALI_ALLOWED_GATEWAY_CIDR: "203.0.113.0/24"
+      OMNIKALI_HELIX_SOURCE_SHA: "e1cbc583add6f5a819fc9dfee63b9b28a1db64db"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
