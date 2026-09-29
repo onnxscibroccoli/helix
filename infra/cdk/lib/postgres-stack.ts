@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as rds from "aws-cdk-lib/aws-rds";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import { Construct } from "constructs";
 import { PlatformNetworkStack } from "./platform-network-stack.js";
 
@@ -20,14 +21,11 @@ export class PostgresStack extends cdk.Stack {
         version: rds.PostgresEngineVersion.VER_17_9,
       }),
       vpc: props.network.vpc,
-      vpcSubnets: { subnetType: props.network.vpc.privateSubnets[0].subnetType },
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [props.network.databaseSecurityGroup],
       credentials: rds.Credentials.fromGeneratedSecret("helixadmin"),
       databaseName: "helix",
-      instanceType: require("aws-cdk-lib/aws-ec2").InstanceType.of(
-        require("aws-cdk-lib/aws-ec2").InstanceClass.T4G,
-        require("aws-cdk-lib/aws-ec2").InstanceSize.MICRO,
-      ),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.MICRO),
       multiAz: true,
       allocatedStorage: 100,
       maxAllocatedStorage: 500,
