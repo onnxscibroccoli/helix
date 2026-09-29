@@ -82,3 +82,10 @@ For AWS changes, preserve the provider-neutral application contract. Infrastruct
 For incidents, write down the observed failure, causal evidence, recovery action, and protection added for future agents.
 
 **Bottom line:** Helix is the cloud/hypervisor control-plane line, not merely a web UI.
+
+
+## Cross-Repository Knowledge Graph
+
+**GRAPH TAG: `OMNIKALI-KG-2026-09-28`**
+
+Future AI agents MUST read [`.omnikali/project-knowledge-graph.md`](.omnikali/project-knowledge-graph.md) before cross-repository architectural changes. Verify capability with tests and live evidence, preserve restore points, make atomic changes, and update the graph after material architecture or failure knowledge changes.
