@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import pg from "pg";
+import {createHash} from "node:crypto";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -35,12 +36,11 @@ test("postgres capability is one-use under concurrent redemption", async () => {
 });
 
 test("postgres capability expiry is enforced by the database", async () => {
+  const expiredHash = createHash("sha256").update("expired-cap").digest("base64url");
   await pool.query(
-    "insert into desktop_capabilities (capability_hash, owner, workspace, expires_at) values (encode(digest($1,'sha256'),'base64'),$2,$3,now()-interval '1 second') on conflict (capability_hash) do update set expires_at=excluded.expires_at",
-    ["expired-cap", "owner-expired", "ws-expired"],
-  ).catch(async () => {
-    await pool.query("delete from desktop_capabilities");
-  });
+    "insert into desktop_capabilities (capability_hash, owner, workspace, expires_at) values ($1,$2,$3,now()-interval '1 second') on conflict (capability_hash) do update set expires_at=excluded.expires_at",
+    [expiredHash, "owner-expired", "ws-expired"],
+  );
   assert.equal(await consumeDesktopCapability("expired-cap"), null);
 });
 
