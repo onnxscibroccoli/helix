@@ -22,7 +22,7 @@ virsh -c qemu:///system net-autostart default
 
 HELIX_REPO_URL="__HELIX_REPO_URL__"
 HELIX_SOURCE_REF="__HELIX_SOURCE_REF__"
-[[ "$HELIX_REPO_URL" =~ ^https://github\\.com/[^/]+/[^/]+(\\.git)?$ ]]
+[[ "$HELIX_REPO_URL" =~ ^https://github\.com/[^/]+/[^/]+(\.git)?$ ]]
 [[ "$HELIX_SOURCE_REF" =~ ^[0-9a-f]{40}$ ]]
 
 install -d -m 0755 /opt/helix
