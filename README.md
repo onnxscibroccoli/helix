@@ -2,11 +2,26 @@
 
 **Status:** Cloud desktop control plane / active production reconstruction and validation  
 **Repository:** `onnxscibroccoli/helix`  
-**Documentation snapshot:** 2026-09-28 23:12 EDT
+**Documentation snapshot:** 2026-09-29 00:58 EDT
 
 Helix is the cloud control-plane and remote-desktop gateway lineage for the persistent workstation platform.
 
 Its central responsibility is to authenticate users, manage workspace/desktop lifecycle, provision or supervise KVM-backed guests, and expose a browser-compatible remote display path.
+
+## Live paths (2026-09-29)
+
+Two public URLs, two machines. Details: [`docs/LIVE_PATHS.md`](docs/LIVE_PATHS.md).
+
+| URL | Machine |
+|---|---|
+| `https://d22bad48irrbqe.cloudfront.net/auth/login` | Product path — Cognito + Helix ticket — Kali guest `helix-omnikali` |
+| `https://d22bad48irrbqe.cloudfront.net/novnc/vnc.html` | Intentional hypervisor console — Debian host `:5900` |
+
+`GET /health` on that origin returned `ok: true` and `oidcConfigured: true` in this session.
+
+K3s on the same EC2 host is a prototype. It is not the CloudFront origin. Do not bind Traefik to 80/443.
+
+Readiness: [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
 
 ## Architecture
 
