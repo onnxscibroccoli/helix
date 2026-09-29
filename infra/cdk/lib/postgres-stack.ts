@@ -11,7 +11,6 @@ export interface PostgresStackProps extends cdk.StackProps {
 
 export class PostgresStack extends cdk.Stack {
   public readonly instance: rds.DatabaseInstance;
-  public readonly secret: rds.DatabaseSecret;
 
   constructor(scope: Construct, id: string, props: PostgresStackProps) {
     super(scope, id, props);
