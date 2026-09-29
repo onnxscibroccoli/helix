@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS omnikali_tasks (
   owner_id text,
   lease_expires_at timestamptz,
   heartbeat_at timestamptz,
+  cancel_requested_at timestamptz,
+  cancel_requested_by text,
+  cancel_acknowledged_at timestamptz,
+  cancel_reconciliation_deadline timestamptz,
   attempts integer NOT NULL DEFAULT 0,
   result jsonb,
   error jsonb,
@@ -19,6 +23,10 @@ CREATE TABLE IF NOT EXISTS omnikali_tasks (
 
 CREATE INDEX IF NOT EXISTS omnikali_tasks_claim_idx
   ON omnikali_tasks (state, lease_expires_at, created_at);
+
+CREATE INDEX IF NOT EXISTS omnikali_tasks_cancellation_idx
+  ON omnikali_tasks (state, cancel_requested_at)
+  WHERE cancel_requested_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS omnikali_task_events (
   event_id bigserial PRIMARY KEY,
