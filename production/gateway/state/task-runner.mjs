@@ -18,6 +18,11 @@ export class TaskRunner {
       await this.store.fail(task.task_id, this.workerId, { code: 'UNSUPPORTED_TARGET', message: `No executor for target: ${task.target}` });
       return { taskId: task.task_id, state: 'FAILED', reason: 'UNSUPPORTED_TARGET' };
     }
+    if (task.cancel_requested_at) {
+      const failure = { code: 'CANCELLATION_REQUESTED', message: 'Task was cancelled before executor dispatch' };
+      await this.store.fail(task.task_id, this.workerId, failure);
+      return { taskId: task.task_id, state: 'FAILED', error: failure };
+    }
     let heartbeatError = null;
     const heartbeat = setInterval(async () => {
       try { await this.store.heartbeat(task.task_id, this.workerId); }
@@ -26,6 +31,7 @@ export class TaskRunner {
     heartbeat.unref?.();
     try {
       const result = await executor(task);
+      if (result?.canceled && task.cancel_requested_at) await this.store.acknowledgeCancellation(task.task_id, 'executor');
       if (heartbeatError) throw new Error(`heartbeat lost: ${heartbeatError.message}`);
       const completed = await this.store.complete(task.task_id, this.workerId, result);
       return { taskId: task.task_id, state: completed.state, result: completed.result ?? result };
