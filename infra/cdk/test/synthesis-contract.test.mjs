@@ -7,6 +7,9 @@ const stack = await readFile(new URL("../lib/github-oidc-bootstrap-stack.ts", im
 for (const needle of [
   "OMNIKALI_GITHUB_REPOSITORY",
   "OMNIKALI_GITHUB_REF",
+  "OMNIKALI_HELIX_SOURCE_SHA",
+  "ComputeStack",
+  "ConvergenceStack",
   "token.actions.githubusercontent.com",
   "sts.amazonaws.com",
   "GithubActionsDeploymentRole",
