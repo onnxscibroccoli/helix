@@ -36,10 +36,10 @@
       register: node_version
       changed_when: false
 
-    - name: Require Node.js 22+
+    - name: Require Node.js 18+
       ansible.builtin.assert:
         that:
-          - node_version.stdout is match("^v(2[2-9]|[3-9][0-9])\\.")
+          - node_version.stdout is match("^v(1[89]|[2-9][0-9])\\.")
         fail_msg: "Claude Code host install requires Node.js 22+."
 
     - name: Install Claude Code into isolated prefix
