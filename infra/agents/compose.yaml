@@ -1,0 +1,26 @@
+services:
+  coding-agent:
+    build:
+      context: .
+      args:
+        OPENHANDS_VERSION: "1.16.0"
+    image: omnikali-coding-agent:1
+    user: "1000:1000"
+    working_dir: /workspace
+    volumes:
+      - ./workspace:/workspace
+      - agent-home:/home/agent
+    environment:
+      HOME: /home/agent
+      GH_CONFIG_DIR: /home/agent/.config/gh
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: bridge
+
+volumes:
+  agent-home:

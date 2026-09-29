@@ -1,0 +1,21 @@
+- name: Verify containerized coding agent
+  hosts: agent_container
+  gather_facts: true
+  tasks:
+    - name: Verify non-root execution
+      ansible.builtin.command: id -u
+      register: uid
+      changed_when: false
+      failed_when: uid.stdout | int == 0
+
+    - name: Verify Claude Code
+      ansible.builtin.command: claude --version
+      changed_when: false
+
+    - name: Verify OpenHands
+      ansible.builtin.command: openhands --version
+      changed_when: false
+
+    - name: Verify GitHub CLI
+      ansible.builtin.command: gh --version
+      changed_when: false
