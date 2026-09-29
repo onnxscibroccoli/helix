@@ -19,5 +19,5 @@ jobs:
       - run: node --check production/gateway/state/task-runner.mjs
       - run: node --check production/gateway/state/agent-executor.mjs
       - run: node --check production/agent/omni-agent.mjs
-      - run: node --test production/gateway/state/task-policy.test.mjs production/gateway/state/task-state.test.mjs production/gateway/state/task-runner.test.mjs production/gateway/state/agent-executor.test.mjs production/gateway/state/task-dispatch.test.mjs
+      - run: node --test production/gateway/state/task-policy.test.mjs production/gateway/state/task-state.test.mjs production/gateway/state/task-runner.test.mjs production/gateway/state/agent-executor.test.mjs production/gateway/state/task-dispatch.test.mjs production/gateway/task-control-contract.test.mjs
       - run: bash -n infra/aws/user-data.sh
