@@ -22,11 +22,31 @@ virsh -c qemu:///system net-autostart default
 
 install -d -m 0755 /opt/helix
 if [[ ! -d /opt/helix/.git ]]; then
-  git clone https://github.com/onnxscibroccoli/helix.git /opt/helix
+  git clone "__HELIX_REPO_URL__" /opt/helix
 else
-  git -C /opt/helix fetch origin
-  git -C /opt/helix reset --hard origin/main
+  git -C /opt/helix remote set-url origin "__HELIX_REPO_URL__"
 fi
+git -C /opt/helix fetch --force origin "__HELIX_SOURCE_REF__"
+git -C /opt/helix reset --hard "__HELIX_SOURCE_REF__"
+git -C /opt/helix clean -ffd
+test "$(git -C /opt/helix rev-parse HEAD)" = "__HELIX_SOURCE_REF__"
+fi
+
+# The executor bridge uses a freshly generated host-local secret on clean reconstruction.
+# Production credential values are never copied into the source tree or image.
+install -d -m 0700 /etc/helix
+if [[ ! -s /etc/helix/agent.env ]]; then
+  AGENT_TOKEN="$(openssl rand -hex 32)"
+  umask 077
+  printf 'AGENT_HOST=127.0.0.1\\nAGENT_PORT=8093\\nAGENT_VM=helix-omnikali\\nHELIX_AGENT_BRIDGE_TOKEN=%s\\n' "$AGENT_TOKEN" > /etc/helix/agent.env
+  chmod 600 /etc/helix/agent.env
+fi
+
+install -m 0644 /opt/helix/production/agent/omni-agent.service /etc/systemd/system/omni-agent.service
+systemctl daemon-reload
+systemctl enable omni-agent.service
+systemctl restart omni-agent.service
+systemctl is-active --quiet omni-agent.service
 
 # EBS attachment names become NVMe names on Nitro. Never assume /dev/nvme1n1.
 # Select the largest non-root disk; Terraform creates the persistent volume
