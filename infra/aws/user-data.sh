@@ -20,13 +20,19 @@ systemctl enable --now libvirtd
 virsh -c qemu:///system net-start default || true
 virsh -c qemu:///system net-autostart default
 
+HELIX_REPO_URL="__HELIX_REPO_URL__"
+HELIX_SOURCE_REF="__HELIX_SOURCE_REF__"
+[[ "$HELIX_REPO_URL" =~ ^https://github\.com/[^/]+/[^/]+(\.git)?$ ]]
+[[ "$HELIX_SOURCE_REF" =~ ^[0-9a-f]{40}$ ]]
+
 install -d -m 0755 /opt/helix
 if [[ ! -d /opt/helix/.git ]]; then
-  git clone https://github.com/onnxscibroccoli/helix.git /opt/helix
-else
-  git -C /opt/helix fetch origin
-  git -C /opt/helix reset --hard origin/main
+  git clone --no-checkout "$HELIX_REPO_URL" /opt/helix
 fi
+git -C /opt/helix remote set-url origin "$HELIX_REPO_URL"
+git -C /opt/helix fetch --depth=1 origin "$HELIX_SOURCE_REF"
+git -C /opt/helix checkout --detach --force "$HELIX_SOURCE_REF"
+test "$(git -C /opt/helix rev-parse HEAD)" = "$HELIX_SOURCE_REF"
 
 # EBS attachment names become NVMe names on Nitro. Never assume /dev/nvme1n1.
 # Select the largest non-root disk; Terraform creates the persistent volume
