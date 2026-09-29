@@ -79,7 +79,8 @@ async function taskControl(){
   if(!taskControlPromise){
     taskControlPromise=(async()=>{
       const store=new TaskStateStore();
-      const runner=new TaskRunner({store,workerId:process.env.OMNIKALI_WORKER_ID || ('gateway-'+randomBytes(12).toString('hex')),executors:{kali:createAgentExecutor({})},heartbeatSeconds:Number(process.env.TASK_HEARTBEAT_SECONDS || 15)});
+      const executor=createAgentExecutor({});
+      const runner=new TaskRunner({store,workerId:process.env.OMNIKALI_WORKER_ID || ('gateway-'+randomBytes(12).toString('hex')),executors:{kali:executor},heartbeatSeconds:Number(process.env.TASK_HEARTBEAT_SECONDS || 15)});
       const dispatch=createTaskDispatch({store,runner,workspaceExists:async id=>(await hv('/domains/'+encodeURIComponent(id))).status===200});
       const worker=new TaskWorker({runner,intervalMs:Number(process.env.TASK_WORKER_INTERVAL_MS || 1000)}); worker.start();
       return {store,runner,dispatch,worker,executors:{kali:executor}};
