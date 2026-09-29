@@ -1,6 +1,11 @@
 {
   "app": "npx tsx bin/omnikali.ts",
   "context": {
-    "aws-cdk:enableDiffNoFail": true
+    "aws-cdk:enableDiffNoFail": true,
+    "@aws-cdk/core:defaultCrossStackReferences": "strong",
+    "availability-zones:account=000000000000:region=us-east-1": [
+      "us-east-1a",
+      "us-east-1b"
+    ]
   }
 }

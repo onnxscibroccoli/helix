@@ -22,6 +22,8 @@ jobs:
       CDK_DEFAULT_REGION: "us-east-1"
       OMNIKALI_GITHUB_REPOSITORY: "onnxscibroccoli/helix"
       OMNIKALI_GITHUB_REF: "refs/heads/main"
+      OMNIKALI_NAME: "helix"
+      OMNIKALI_ALLOWED_GATEWAY_CIDR: "203.0.113.0/24"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
