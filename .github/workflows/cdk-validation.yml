@@ -24,6 +24,10 @@ jobs:
       OMNIKALI_GITHUB_REF: "refs/heads/main"
       OMNIKALI_NAME: "helix"
       OMNIKALI_ALLOWED_GATEWAY_CIDR: "203.0.113.0/24"
+      OMNIKALI_HELIX_SOURCE_SHA: "d46bbec855dc65e04160a5f17b4b67e30b6ed038"
+      OMNIKALI_INSTANCE_TYPE: "m8i.2xlarge"
+      OMNIKALI_ROOT_VOLUME_SIZE: "80"
+      OMNIKALI_PERSISTENT_VOLUME_SIZE: "200"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -33,5 +37,5 @@ jobs:
           cache-dependency-path: infra/cdk/package.json
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run build
-      - run: npm run synth
+      - run: npm run synth -- --strict
       - run: node test/synthesis-contract.test.mjs
