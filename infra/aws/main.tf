@@ -73,7 +73,7 @@ resource "aws_instance" "hypervisor" {
     encrypted = true
     delete_on_termination = true
   }
-  user_data = file("${path.module}/user-data.sh")
+  user_data = replace(replace(file("${path.module}/user-data.sh"), "__HELIX_REPO_URL__", var.helix_repo_url), "__HELIX_SOURCE_REF__", var.helix_source_ref)
   user_data_replace_on_change = true
   tags = { Name = "${var.name}-hypervisor", HelixRole = "persistent-cloud-desktop" }
 }
