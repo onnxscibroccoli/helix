@@ -1,13 +1,13 @@
 data "archive_file" "recovery_controller" {
   type        = "zip"
-  source_file = "\${path.module}/recovery_controller.py"
-  output_path = "\${path.module}/.recovery_controller.zip"
+  source_file = "${path.module}/recovery_controller.py"
+  output_path = "${path.module}/.recovery_controller.zip"
 }
 
 data "aws_caller_identity" "current" {}
 
 resource "aws_dynamodb_table" "origin_recovery" {
-  name         = "\${var.name}-origin-recovery"
+  name         = "${var.name}-origin-recovery"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "pk"
 
@@ -21,7 +21,7 @@ resource "aws_dynamodb_table" "origin_recovery" {
     enabled        = true
   }
 
-  tags = { Name = "\${var.name}-origin-recovery" }
+  tags = { Name = "${var.name}-origin-recovery" }
 }
 
 data "aws_iam_policy_document" "recovery_assume" {
@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "recovery_assume" {
 }
 
 resource "aws_iam_role" "origin_recovery" {
-  name               = "\${var.name}-origin-recovery"
+  name               = "${var.name}-origin-recovery"
   assume_role_policy = data.aws_iam_policy_document.recovery_assume.json
 }
 
@@ -49,15 +49,15 @@ data "aws_iam_policy_document" "origin_recovery" {
   statement {
     sid       = "InstanceRecovery"
     actions   = ["ec2:StartInstances", "ec2:RebootInstances"]
-    resources = ["arn:aws:ec2:\${var.region}:\${data.aws_caller_identity.current.account_id}:instance/\${var.recovery_instance_id}"]
+    resources = ["arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:instance/${var.recovery_instance_id}"]
   }
 
   statement {
     sid       = "RunHostGuard"
     actions   = ["ssm:DescribeInstanceInformation", "ssm:SendCommand"]
     resources = [
-      "arn:aws:ssm:\${var.region}::document/AWS-RunShellScript",
-      "arn:aws:ec2:\${var.region}:\${data.aws_caller_identity.current.account_id}:instance/\${var.recovery_instance_id}"
+      "arn:aws:ssm:${var.region}::document/AWS-RunShellScript",
+      "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:instance/${var.recovery_instance_id}"
     ]
   }
 
@@ -75,18 +75,18 @@ data "aws_iam_policy_document" "origin_recovery" {
 }
 
 resource "aws_iam_role_policy" "origin_recovery" {
-  name   = "\${var.name}-origin-recovery"
+  name   = "${var.name}-origin-recovery"
   role   = aws_iam_role.origin_recovery.id
   policy = data.aws_iam_policy_document.origin_recovery.json
 }
 
 resource "aws_cloudwatch_log_group" "origin_recovery" {
-  name              = "/aws/lambda/\${var.name}-origin-recovery"
+  name              = "/aws/lambda/${var.name}-origin-recovery"
   retention_in_days = 30
 }
 
 resource "aws_lambda_function" "origin_recovery" {
-  function_name    = "\${var.name}-origin-recovery"
+  function_name    = "${var.name}-origin-recovery"
   description      = "Graduated self-healing controller for the Helix CloudFront origin"
   role             = aws_iam_role.origin_recovery.arn
   runtime          = "python3.13"
@@ -111,7 +111,7 @@ resource "aws_lambda_function" "origin_recovery" {
 }
 
 resource "aws_cloudwatch_event_rule" "origin_recovery" {
-  name                = "\${var.name}-origin-recovery"
+  name                = "${var.name}-origin-recovery"
   description         = "Run the Helix origin recovery controller every minute"
   schedule_expression = "rate(1 minute)"
 }
@@ -130,7 +130,7 @@ resource "aws_lambda_permission" "eventbridge" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx" {
-  alarm_name          = "\${var.name}-cloudfront-5xx"
+  alarm_name          = "${var.name}-cloudfront-5xx"
   alarm_description   = "Wake the external recovery controller when CloudFront returns a meaningful 5xx rate"
   namespace           = "AWS/CloudFront"
   metric_name         = "5xxErrorRate"
