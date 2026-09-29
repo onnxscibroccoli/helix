@@ -46,6 +46,7 @@ function loadState() {
 let state = loadState();
 state.storage ||= {};
 state.owners ||= {};
+state.expiresAt ||= {};
 function saveState() { writeFileSync(STATE, JSON.stringify(state, null, 2)); }
 
 async function sh(args) {
