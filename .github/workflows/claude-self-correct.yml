@@ -1,0 +1,49 @@
+name: claude-self-correct
+
+on:
+  workflow_run:
+    workflows: ["production-validation"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  id-token: write
+
+jobs:
+  repair:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@fd1c128679612beff4ca259c78021c506e8aa7a7
+
+      - name: Claude source repair
+        uses: anthropics/claude-code-action@fd1c128679612beff4ca259c78021c506e8aa7a7
+        with:
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          additional_permissions: |
+            actions: read
+          prompt: |
+            A trusted main-branch production-validation run failed.
+
+            Diagnose the failure using the repository and CI evidence.
+            Fix only the source/configuration defect that caused the failure.
+            Do not weaken tests, security controls, branch protection, target authorization,
+            credential isolation, or production safety gates.
+            Do not deploy to AWS.
+            Do not use or request production credentials.
+            Run the narrowest relevant tests and then the repository validation required
+            by the failure.
+            Work on a new agent/self-correction branch and leave a reviewable change.
+            Do not merge main.
+            Report the exact root cause, changed files, tests run, and remaining uncertainty.
+          claude_args: |
+            --max-turns 10
+            --allowedTools "Read,Edit,Write,Bash(git status),Bash(git diff),Bash(npm ci),Bash(npm test),Bash(npm run test:production-gateway),Bash(terraform -chdir=infra/terraform fmt -check),Bash(terraform -chdir=infra/terraform validate)"
