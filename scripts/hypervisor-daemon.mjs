@@ -173,9 +173,7 @@ async function destroyDomain(id) {
   delete state.owners[id];
   delete state.storage[id];
   delete state.kinds[id];
-  saveState();
-  delete state.storage[id];
-  delete state.kinds[id];
+  delete state.expiresAt[id];
   saveState();
   return { ok: true };
 }
