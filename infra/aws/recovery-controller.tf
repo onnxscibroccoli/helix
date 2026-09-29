@@ -21,7 +21,9 @@ resource "aws_dynamodb_table" "origin_recovery" {
     enabled        = true
   }
 
-  tags = { Name = "${var.name}-origin-recovery" }
+  tags = {
+    Name = "${var.name}-origin-recovery"
+  }
 }
 
 data "aws_iam_policy_document" "recovery_assume" {
@@ -107,7 +109,10 @@ resource "aws_lambda_function" "origin_recovery" {
     }
   }
 
-  depends_on = [aws_iam_role_policy.origin_recovery, aws_cloudwatch_log_group.origin_recovery]
+  depends_on = [
+    aws_iam_role_policy.origin_recovery,
+    aws_cloudwatch_log_group.origin_recovery,
+  ]
 }
 
 resource "aws_cloudwatch_event_rule" "origin_recovery" {
@@ -158,6 +163,12 @@ resource "aws_lambda_permission" "cloudwatch_alarm" {
   source_arn    = aws_cloudwatch_metric_alarm.cloudfront_5xx.arn
 }
 
-output "origin_recovery_lambda" { value = aws_lambda_function.origin_recovery.arn }
-output "origin_recovery_table" { value = aws_dynamodb_table.origin_recovery.name }
-output "cloudfront_5xx_alarm" { value = aws_cloudwatch_metric_alarm.cloudfront_5xx.arn }
+output "origin_recovery_lambda" {
+  value = aws_lambda_function.origin_recovery.arn
+}
+output "origin_recovery_table" {
+  value = aws_dynamodb_table.origin_recovery.name
+}
+output "cloudfront_5xx_alarm" {
+  value = aws_cloudwatch_metric_alarm.cloudfront_5xx.arn
+}
