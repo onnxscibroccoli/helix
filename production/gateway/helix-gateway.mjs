@@ -18,6 +18,7 @@ const CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET || "";
 const REDIRECT_URI = process.env.OIDC_REDIRECT_URI || "";
 const PUBLIC_ORIGIN = process.env.HELIX_PUBLIC_ORIGIN || "";
 const SESSION_SECRET = process.env.SESSION_SIGNING_SECRET || "";
+const AGENT_API_SECRET = process.env.HELIX_AGENT_API_SECRET || "";
 const HYPERVISOR = process.env.HELIX_HYPERVISOR_URL || "http://127.0.0.1:8090";
 const SESSION_TTL = Number(process.env.SESSION_TTL_SECONDS || 3600);
 const WS_TTL = Number(process.env.WS_TICKET_TTL_SECONDS || 60);
@@ -69,6 +70,30 @@ async function workspace(req,res,id){const s=await verify(parseCookies(req)[COOK
     d=claimed;
   }if(d.body.status!=="running"){const started=await hv("/domains",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,kind:d.body.kind==="ephemeral"?"ephemeral":"persistent",owner:s.sub})});if(started.status>=400)return json(res,started.status,{error:"workspace failed to start"});d=started;}if(d.body.status!=="running"||d.body.display==null)return json(res,409,{error:"workspace is not ready yet"});const ticket=await sign({sub:s.sub,workspace:id,kind:"desktop"},WS_TTL);return json(res,200,{workspace:id,status:d.body.status,display:d.body.display,streamPath:"/kasm/ws/"+id,ticket})}
 async function session(req){return verify(parseCookies(req)[COOKIE])}
+function agentAuthorized(req){
+  const auth=String(req.headers.authorization||"");
+  if(!AGENT_API_SECRET || !auth.startsWith("Bearer ")) return false;
+  const supplied=Buffer.from(auth.slice(7));
+  const expected=Buffer.from(AGENT_API_SECRET);
+  return supplied.length===expected.length && timingSafeEqual(supplied,expected);
+}
+async function agentSession(req,res){
+  if(!agentAuthorized(req)) return json(res,401,{error:"unauthorized"});
+  let b; try{b=await requestBody(req)}catch{return json(res,400,{error:"invalid json"})}
+  const id=String(b.workspaceId||"");
+  const owner=String(b.owner||"");
+  const distro=String(b.distro||"debian");
+  const tier=b.tier==="ephemeral"?"ephemeral":b.tier==="persistent"?"persistent":null;
+  if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id)||!owner||!tier) return json(res,400,{error:"workspaceId, owner and tier are required"});
+  const existing=await hv("/domains/"+encodeURIComponent(id));
+  if(existing.status===200 && existing.body.owner && existing.body.owner!==owner) return json(res,409,{error:"workspace belongs to another owner"});
+  let d=existing.status===200?existing:await hv("/domains",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,kind:tier,owner,distro})});
+  if(d.status>=400) return json(res,d.status,{error:"workspace provisioning failed"});
+  if(d.body.status!=="running") return json(res,202,{workspaceId:id,status:d.body.status,operationId:id});
+  if(d.body.display==null) return json(res,202,{workspaceId:id,status:"booting",operationId:id});
+  const ticket=await sign({sub:owner,workspace:id,kind:"desktop"},WS_TTL);
+  return json(res,200,{session_url:PUBLIC_ORIGIN+"/desktop/"+encodeURIComponent(id),workspaceId:id,status:d.body.status,streamPath:"/kasm/ws/"+id,ticket});
+}
 async function requestBody(req){return new Promise((resolve,reject)=>{const chunks=[];req.on("data",x=>chunks.push(x));req.on("end",()=>{try{resolve(chunks.length?JSON.parse(Buffer.concat(chunks)):{});}catch(e){reject(e)}});req.on("error",reject)})}
 async function forgotCloudPassword(req,res){
   if(!configured()) return html(res,503,"<h1>OmniKali Cloud</h1><p>Authentication is not configured.</p>");
@@ -146,6 +171,7 @@ const server=createServer(async (req,res)=>{
       res.writeHead(302,{location:logout, "set-cookie":clearCookie(COOKIE), "cache-control":"no-store"});
       return res.end();
     }
+    if(req.method==="POST" && u.pathname==="/api/v1/sessions") return agentSession(req,res);
     if(req.method==="GET" && u.pathname==="/api/v1/workspaces") return workspaceList(req,res);
     if(req.method==="POST" && u.pathname==="/api/v1/workspaces") return workspaceCreate(req,res);
     if(req.method==="POST" && u.pathname.match(/^\/api\/v1\/workspaces\/[^/]+\/password$/)) return setKaliPassword(req,res,u.pathname.split("/")[4]);
