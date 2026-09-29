@@ -1,0 +1,15 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-east-1
+hostnames:
+  - instance-id
+filters:
+  tag:HelixRole:
+    - persistent-cloud-desktop
+compose:
+  ansible_connection: '"amazon.aws.aws_ssm"'
+  ansible_host: instance_id
+  ansible_python_interpreter: '"/usr/bin/python3"'
+  ansible_aws_ssm_region: '"us-east-1"'
+  ansible_aws_ssm_bucket_name: 'lookup("ansible.builtin.env", "OMNIKALI_SSM_BUCKET")'
+  ansible_aws_ssm_s3_addressing_style: '"virtual"'

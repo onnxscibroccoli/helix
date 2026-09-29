@@ -1,0 +1,84 @@
+- name: Converge OmniKali hypervisor through SSM
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Require Ubuntu host
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == "Ubuntu"
+          - ansible_facts.architecture in ["x86_64", "amd64"]
+
+    - name: Verify SSM agent
+      ansible.builtin.service_facts:
+
+    - name: Require SSM agent service
+      ansible.builtin.assert:
+        that:
+          - "'amazon-ssm-agent.service' in ansible_facts.services"
+
+    - name: Ensure required host packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - git
+          - nginx
+          - libvirt-daemon-system
+          - libvirt-clients
+          - qemu-kvm
+          - qemu-guest-agent
+        state: present
+        update_cache: true
+
+    - name: Ensure libvirt and guest agent are enabled
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - libvirtd
+        - qemu-guest-agent
+
+    - name: Ensure Helix directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /opt/helix
+        - /var/lib/helix
+
+    - name: Verify immutable Helix checkout
+      ansible.builtin.command:
+        cmd: git -C /opt/helix rev-parse HEAD
+      register: helix_head
+      changed_when: false
+
+    - name: Require a pinned Helix source SHA
+      ansible.builtin.assert:
+        that:
+          - helix_head.stdout is match("^[0-9a-f]{40}$")
+        fail_msg: "Helix checkout is not at an immutable commit SHA."
+
+    - name: Verify nested virtualization
+      ansible.builtin.shell:
+        cmd: cat /sys/module/kvm_intel/parameters/nested 2>/dev/null || cat /sys/module/kvm_amd/parameters/nested
+      register: nested
+      changed_when: false
+      failed_when: nested.rc != 0 or ("Y" not in nested.stdout and "1" not in nested.stdout)
+
+    - name: Verify OmniKali guest
+      ansible.builtin.command:
+        cmd: virsh domstate helix-omnikali
+      register: guest_state
+      changed_when: false
+      failed_when: guest_state.rc != 0 or "running" not in guest_state.stdout
+
+    - name: Verify QEMU guest agent
+      ansible.builtin.command:
+        cmd: virsh qemu-agent-command helix-omnikali '{"execute":"guest-ping"}'
+      register: guest_ping
+      changed_when: false
+      failed_when: guest_ping.rc != 0
