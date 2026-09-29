@@ -113,7 +113,7 @@ resource "aws_instance" "hypervisor" {
     delete_on_termination = true
   }
 
-  user_data                   = file("${path.module}/user-data.sh")
+  user_data = replace(\n    replace(file("${path.module}/user-data.sh"), "__HELIX_REPO_URL__", var.helix_repo_url),\n    "__HELIX_SOURCE_REF__",\n    var.helix_source_ref\n  )
   user_data_replace_on_change = true
 
   tags = {
