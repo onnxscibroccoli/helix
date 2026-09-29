@@ -44,5 +44,5 @@ test("postgres capability expiry is enforced by the database", async () => {
   assert.equal(await consumeDesktopCapability("expired-cap"), null);
 });
 
-await pool.end();
+test.after(async () => { await pool.end(); });
 console.log("desktop-capability-store postgres: PASS");
