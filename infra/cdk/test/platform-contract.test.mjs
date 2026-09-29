@@ -7,6 +7,8 @@ const bin = await readFile(new URL("../bin/omnikali.ts", import.meta.url), "utf8
 
 for (const needle of [
   "10.42.0.0/16",
+  "us-east-1a",
+  "us-east-1b",
   "PRIVATE_ISOLATED",
   "allowedGatewayCidr",
   "5432",
