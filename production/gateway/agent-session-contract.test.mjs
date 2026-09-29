@@ -18,7 +18,11 @@ assert.ok(source.includes('return json(res,409,{error:"workspace belongs to anot
 assert.ok(source.includes('return json(res,202,{workspaceId:id,status:d.body.status,operationId:id})'));
 assert.ok(source.includes('return json(res,200,{session_url:PUBLIC_ORIGIN'));
 console.log("agent-session-contract: source contract checks passed");
-assert.ok(source.includes("desktopCapabilities.set"));
-assert.ok(source.includes("desktopCapabilities.delete(capability)"));
+assert.ok(source.includes("putDesktopCapability"));
+assert.ok(source.includes("consumeDesktopCapability"));
 assert.ok(source.includes("/desktop/capability/"));
 assert.ok(source.includes("if(d.body.status!==\"running\") {"));
+
+assert.ok(source.includes("desktopCapabilityStoreMode"));
+assert.ok(!source.includes("new Map()"));
+assert.ok(source.includes("desktopCapabilityStore"));
