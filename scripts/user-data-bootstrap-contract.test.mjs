@@ -28,6 +28,12 @@ test("user-data bootstrap is deterministic and treats SSM as operational access"
   assert.match(script, /libvirtd/);
   assert.match(script, /helix-kvm-bootstrap\.sh/);
   assert.match(script, /operational access channel/);
+  assert.match(script, /__HELIX_REPO_URL__/);
+  assert.match(script, /__HELIX_SOURCE_REF__/);
+  assert.match(script, /git fetch --depth=1 origin/);
+  assert.match(script, /git checkout --detach --force/);
+  assert.match(script, /rev-parse HEAD/);
+  assert.doesNotMatch(script, /reset --hard origin\/main/);
   assert.doesNotMatch(script, /AWS::SSM::Association/);
 });
 
