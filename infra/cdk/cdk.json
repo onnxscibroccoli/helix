@@ -1,0 +1,6 @@
+{
+  "app": "npx tsx bin/omnikali.ts",
+  "context": {
+    "aws-cdk:enableDiffNoFail": true
+  }
+}
