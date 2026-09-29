@@ -48,6 +48,8 @@ const hypervisor = createServer(async (req, res) => {
   return json(res, 404, {error: "not found"});
 });
 
+workspaces.set("integration-stopped", {id:"integration-stopped", owner:"owner-a", kind:"persistent", status:"stopped", display:9});
+
 await new Promise(resolve => hypervisor.listen(hypervisorPort, "127.0.0.1", resolve));
 
 const gateway = spawn(process.execPath, ["production/gateway/helix-gateway.mjs"], {
