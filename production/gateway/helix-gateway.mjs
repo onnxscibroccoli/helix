@@ -82,7 +82,7 @@ async function taskControl(){
       const runner=new TaskRunner({store,workerId:process.env.OMNIKALI_WORKER_ID || ('gateway-'+randomBytes(12).toString('hex')),executors:{kali:createAgentExecutor({})},heartbeatSeconds:Number(process.env.TASK_HEARTBEAT_SECONDS || 15)});
       const dispatch=createTaskDispatch({store,runner,workspaceExists:async id=>(await hv('/domains/'+encodeURIComponent(id))).status===200});
       const worker=new TaskWorker({runner,intervalMs:Number(process.env.TASK_WORKER_INTERVAL_MS || 1000)}); worker.start();
-      return {store,runner,dispatch,worker};
+      return {store,runner,dispatch,worker,executors:{kali:executor}};
     })().catch(error=>{taskControlPromise=null;throw error});
   }
   return taskControlPromise;
@@ -179,6 +179,25 @@ const server=createServer(async (req,res)=>{
       return res.end();
     }
     if(req.method==="POST" && u.pathname==="/api/v1/tasks") return taskSubmit(req,res);
+    if(req.method==="POST" && u.pathname.match(/^\/api\/v1\/tasks\/[0-9a-fA-F-]{36}\/cancel$/)) {
+      const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
+      const id=u.pathname.split("/")[4], c=await taskControl(), task=await c.store.getTask(id);
+      if(!task)return json(res,404,{error:"task not found"});
+      if(task.workspace_id){
+        const d=await hv("/domains/"+encodeURIComponent(task.workspace_id));
+        if(d.status!==200 || d.body.owner!==s.sub)return json(res,403,{error:"task not authorized"});
+      }
+      const requested=await c.store.requestCancellation(id,s.sub);
+      if(!requested.accepted)return json(res,200,{task_id:id,state:requested.task.state,cancellation:"already_terminal"});
+      let cancellation={acknowledged:false};
+      if(requested.task.state==="RUNNING" && task.target==="kali" && typeof c.executors.kali?.cancelOperation==="function"){
+        try{
+          cancellation=await c.executors.kali.cancelOperation(task.idempotency_key);
+          if(cancellation.acknowledged) await c.store.acknowledgeCancellation(id,"agent");
+        }catch(error){ cancellation={acknowledged:false,error_code:error?.code||"CANCELLATION_DELIVERY_FAILED"}; }
+      }
+      return json(res,202,{task_id:id,state:requested.task.state,cancel_requested_at:requested.task.cancel_requested_at,cancel_acknowledged_at:cancellation.acknowledged?new Date().toISOString():null,cancellation});
+    }
     if(req.method==="GET" && u.pathname.match(/^\/api\/v1\/acceptance\/tasks\/[0-9a-fA-F-]{36}$/)) {
       const s=await session(req); if(!s){res.writeHead(401);return res.end("unauthorized")}
       const id=u.pathname.split("/").pop(), c=await taskControl(), task=await c.store.getTask(id);
