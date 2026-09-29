@@ -32,7 +32,7 @@ const VCPUS = Number(process.env.HELIX_VM_VCPUS || 1);
 const BRIDGE = process.env.HELIX_LIBVIRT_NETWORK || "default";
 const STORAGE_AGENT_URL = process.env.HELIX_STORAGE_AGENT_URL || "";
 const STORAGE_AGENT_TOKEN = process.env.HELIX_STORAGE_AGENT_TOKEN || "";
-const PERSISTENT_DISK_GB = Number(process.env.HELIX_PERSISTENT_DISK_GB || 20);
+const PERSISTENT_DISK_GB = Number(process.env.HELIX_PERSISTENT_DISK_GB || 20);\nconst EPHEMERAL_TTL_SECONDS = Number(process.env.HELIX_EPHEMERAL_TTL_SECONDS || 3600);\nconst RECONCILE_INTERVAL_MS = Number(process.env.HELIX_RECONCILE_INTERVAL_MS || 30000);
 
 mkdirSync(DISKS, { recursive: true });
 mkdirSync(ROOT, { recursive: true });
@@ -138,7 +138,7 @@ async function startDomain(id, kind, owner) {
   const name = domainName(id);
   const exists = await existsDomain(name);
   if (!exists) await defineDomain(id, kind);
-  if (owner) { state.owners[id] = String(owner); saveState(); }
+  if (owner) { state.owners[id] = String(owner); }\n  if (kind === "ephemeral") state.expiresAt[id] = Date.now() + EPHEMERAL_TTL_SECONDS * 1000;\n  else delete state.expiresAt[id];\n  saveState();
   const s = await domainState(name);
   if (s !== "running") await sh(["start", name]);
   return describe(id);
@@ -185,11 +185,11 @@ async function describe(id) {
   return {
     id, owner: state.owners[id] || null, kind: state.kinds[id] || "persistent", status: stateName === "running" ? "running" : "stopped",
     domain: name, display: displayNumber, vnc: display,
-    ticket: state.tickets[id] || null, streamPath: `/kasm/ws/${id}`,
+    ticket: state.tickets[id] || null, expiresAt: state.expiresAt[id] || null, streamPath: `/kasm/ws/${id}`,
     memoryMb: MEMORY_MB, vcpus: VCPUS, disk, storage: state.storage[id] || null
   };
 }
-async function capabilities() {
+async function reconcileExpired() {\n  const now = Date.now();\n  for (const [id, expiresAt] of Object.entries(state.expiresAt)) {\n    if (Number(expiresAt) > now) continue;\n    if (state.kinds[id] !== "ephemeral") { delete state.expiresAt[id]; continue; }\n    try { await destroyDomain(id); } catch (error) { console.error(`[helix-libvirt] failed to reclaim expired ${id}:`, error?.message || error); }\n  }\n  saveState();\n}\n\nasync function capabilities() {
   let kvm = false, nested = "unknown", libvirt = false;
   try { kvm = existsSync("/dev/kvm"); await sh(["version"]); libvirt = true; } catch {}
   for (const p of ["/sys/module/kvm_intel/parameters/nested","/sys/module/kvm_amd/parameters/nested"]) {
@@ -263,4 +263,4 @@ server.on("upgrade",(req,socket,head)=>{
   }).catch(()=>socket.destroy());
 });
 
-server.listen(PORT,HOST,()=>console.log(`[helix-libvirt] ${HOST}:${PORT} kvm=${existsSync("/dev/kvm")}`));
+server.listen(PORT,HOST,async()=>{\n  await reconcileExpired();\n  setInterval(() => void reconcileExpired(), RECONCILE_INTERVAL_MS).unref();\n  console.log(`[helix-libvirt] ${HOST}:${PORT} kvm=${existsSync("/dev/kvm")} ephemeralTtl=${EPHEMERAL_TTL_SECONDS}s`);\n});
