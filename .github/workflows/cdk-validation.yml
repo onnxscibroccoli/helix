@@ -25,6 +25,7 @@ jobs:
       OMNIKALI_NAME: "helix"
       OMNIKALI_ALLOWED_GATEWAY_CIDR: "203.0.113.0/24"
       OMNIKALI_HELIX_SOURCE_SHA: "d5f00a269b91ffa494a32ae3fd9c87bc226e48ba"
+      OMNIKALI_PLATFORM_STACKS: "network,postgres,compute"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
