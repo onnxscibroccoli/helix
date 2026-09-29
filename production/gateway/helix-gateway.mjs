@@ -30,6 +30,7 @@ const NONCE_COOKIE = "helix_oidc_nonce";
 if (!SESSION_SECRET) throw new Error("SESSION_SIGNING_SECRET is required");
 const key = new TextEncoder().encode(SESSION_SECRET);
 let oidcConfigPromise, jwks;
+const desktopCapabilities = new Map();
 const b64url = b => b.toString("base64url");
 function parseCookies(req){return Object.fromEntries((req.headers.cookie||"").split(";").map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf("=");return[x.slice(0,i),decodeURIComponent(x.slice(i+1))]}))}
 function cookie(n,v,max,secure=true){return n+"="+encodeURIComponent(v)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age="+max+(secure?"; Secure":"")}
@@ -62,6 +63,16 @@ async function login(req,res,u){
 }
 async function callback(req,res,u){const ck=parseCookies(req),state=u.searchParams.get("state"),code=u.searchParams.get("code");if(!state||!ck[STATE_COOKIE]||state.length!==ck[STATE_COOKIE].length||!timingSafeEqual(Buffer.from(state),Buffer.from(ck[STATE_COOKIE]))) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"invalid oauth state"}); }if(!code) { res.setHeader("cache-control","no-store, no-cache, must-revalidate"); return json(res,400,{error:"missing authorization code"}); }const c=await discovery(),tr=await fetch(c.token_endpoint,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",code,redirect_uri:REDIRECT_URI,client_id:CLIENT_ID,client_secret:CLIENT_SECRET})});if(!tr.ok){const detail=await tr.text();console.error("[helix-gateway] OIDC token exchange failed",tr.status,detail.slice(0,1000));return json(res,502,{error:"oidc token exchange failed"});}const t=await tr.json();if(!t.id_token)return json(res,502,{error:"no id_token"});jwks ||= createRemoteJWKSet(new URL(c.jwks_uri));const {payload}=await jwtVerify(t.id_token,jwks,{issuer:ISSUER,audience:CLIENT_ID});if(!payload.nonce||!ck[NONCE_COOKIE]||payload.nonce!==ck[NONCE_COOKIE])return json(res,400,{error:"invalid oidc nonce"});const s=await sign({sub:String(payload.sub),email:payload.email||null,name:payload.name||null},SESSION_TTL);res.writeHead(302,{"cache-control":"no-store, no-cache, must-revalidate","pragma":"no-cache",location:ck.helix_return_to==="omnikali"?"/omnikali/authorize":"/","set-cookie":[clearCookie("helix_return_to"),cookie(COOKIE,s,SESSION_TTL),clearCookie(STATE_COOKIE),clearCookie(NONCE_COOKIE)]});res.end()}
 async function hv(path,opts){const r=await fetch(HYPERVISOR+path,opts);const t=await r.text();let b;try{b=JSON.parse(t)}catch{b={raw:t}}return{status:r.status,body:b}}
+async function redeemDesktopCapability(req,res,capability){
+  const grant=desktopCapabilities.get(capability);
+  if(!grant){return json(res,401,{error:"invalid or already-used desktop capability"});}
+  desktopCapabilities.delete(capability);
+  if(grant.expiresAt<=Date.now()) return json(res,401,{error:"desktop capability expired"});
+  const d=await hv("/domains/"+encodeURIComponent(grant.workspace));
+  if(d.status!==200||d.body.owner!==grant.owner||d.body.status!=="running"||d.body.display==null) return json(res,409,{error:"workspace is not ready"});
+  const s=await sign({sub:grant.owner,workspace:grant.workspace,kind:"desktop"},WS_TTL);
+  res.writeHead(302,{location:"/desktop/"+encodeURIComponent(grant.workspace), "set-cookie":cookie(COOKIE,s,WS_TTL)}); return res.end();
+}
 async function desktop(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(302,{location:"/auth/login"});return res.end()}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});res.setHeader("cache-control","no-store, no-cache, must-revalidate");const file=readFileSync("/opt/helix/production/gateway/desktop.html","utf8");return html(res,200,file.replace("__WORKSPACE_ID__",JSON.stringify(id)))}
 async function workspace(req,res,id){const s=await verify(parseCookies(req)[COOKIE]);if(!s){res.writeHead(401);return res.end("unauthorized")}if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))return json(res,400,{error:"invalid workspace id"});let d=await hv("/domains/"+encodeURIComponent(id));if(d.status!==200)return json(res,d.status,{error:"workspace not found"});if(d.body.owner && d.body.owner!==s.sub)return json(res,403,{error:"workspace not authorized"});
   if(!d.body.owner){
@@ -89,10 +100,16 @@ async function agentSession(req,res){
   if(existing.status===200 && existing.body.owner && existing.body.owner!==owner) return json(res,409,{error:"workspace belongs to another owner"});
   let d=existing.status===200?existing:await hv("/domains",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,kind:tier,owner,distro})});
   if(d.status>=400) return json(res,d.status,{error:"workspace provisioning failed"});
+  if(d.body.status!=="running") {
+    const started=await hv("/domains",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,kind:tier,owner,distro})});
+    if(started.status>=400) return json(res,started.status,{error:"workspace start failed"});
+    d=started;
+  }
   if(d.body.status!=="running") return json(res,202,{workspaceId:id,status:d.body.status,operationId:id});
   if(d.body.display==null) return json(res,202,{workspaceId:id,status:"booting",operationId:id});
-  const ticket=await sign({sub:owner,workspace:id,kind:"desktop"},WS_TTL);
-  return json(res,200,{session_url:PUBLIC_ORIGIN+"/desktop/"+encodeURIComponent(id),workspaceId:id,status:d.body.status,streamPath:"/kasm/ws/"+id,ticket});
+  const capability= b64url(randomBytes(32));
+  desktopCapabilities.set(capability,{owner,workspace:id,expiresAt:Date.now()+WS_TTL*1000});
+  return json(res,200,{session_url:PUBLIC_ORIGIN+"/desktop/capability/"+capability,workspaceId:id,status:d.body.status,streamPath:"/kasm/ws/"+id,expiresIn:WS_TTL});
 }
 async function requestBody(req){return new Promise((resolve,reject)=>{const chunks=[];req.on("data",x=>chunks.push(x));req.on("end",()=>{try{resolve(chunks.length?JSON.parse(Buffer.concat(chunks)):{});}catch(e){reject(e)}});req.on("error",reject)})}
 async function forgotCloudPassword(req,res){
@@ -177,6 +194,9 @@ const server=createServer(async (req,res)=>{
     if(req.method==="POST" && u.pathname.match(/^\/api\/v1\/workspaces\/[^/]+\/password$/)) return setKaliPassword(req,res,u.pathname.split("/")[4]);
     if(req.method==="GET" && u.pathname.startsWith("/api/v1/workspaces/")) {
       return workspace(req,res,u.pathname.split("/").pop());
+    }
+    if(req.method==="GET" && u.pathname.startsWith("/desktop/capability/")) {
+      return redeemDesktopCapability(req,res,u.pathname.split("/").pop());
     }
     if(req.method==="GET" && u.pathname.startsWith("/desktop/")) {
       return desktop(req,res,u.pathname.split("/").pop());
