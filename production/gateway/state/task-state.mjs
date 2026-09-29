@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
-import Redis from 'ioredis';
+let Redis;
 
 const TASK_STATES = Object.freeze({
   PENDING: 'PENDING',
@@ -14,7 +14,9 @@ export class TaskStateStore {
     leaseSeconds = Number(process.env.TASK_LEASE_SECONDS || 45), cancellationWindowSeconds = Number(process.env.TASK_CANCELLATION_WINDOW_SECONDS || 30), pool = null, redis = null } = {}) {
     if (!databaseUrl && !pool) throw new Error('DATABASE_URL is required');
     this.pool = pool || new Pool({ connectionString: databaseUrl, max: 10 });
-    this.redis = redis || (redisUrl ? new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 2 }) : null);
+    this.redis = redis || null;
+    this.redisUrl = redisUrl;
+
     this.leaseMs = Math.max(5000, leaseSeconds * 1000);
     this.cancellationWindowMs = Math.max(1000, cancellationWindowSeconds * 1000);
   }
@@ -235,13 +237,23 @@ export class TaskStateStore {
   }
 
   async acquireLock(name, ownerId, ttlMs = this.leaseMs) {
-    if (!this.redis) throw new Error('REDIS_URL is required for distributed locks');
+    if (!this.redis) {
+      if (!this.redisUrl) throw new Error('REDIS_URL is required for distributed locks');
+      const mod = await import('ioredis');
+      Redis = mod.default;
+      this.redis = new Redis(this.redisUrl, { lazyConnect: true, maxRetriesPerRequest: 2 });
+    }
     if (this.redis.status === 'wait') await this.redis.connect();
     return (await this.redis.set('omnikali:lock:' + name, ownerId, 'NX', 'PX', ttlMs)) === 'OK';
   }
 
   async releaseLock(name, ownerId) {
-    if (!this.redis) throw new Error('REDIS_URL is required for distributed locks');
+    if (!this.redis) {
+      if (!this.redisUrl) throw new Error('REDIS_URL is required for distributed locks');
+      const mod = await import('ioredis');
+      Redis = mod.default;
+      this.redis = new Redis(this.redisUrl, { lazyConnect: true, maxRetriesPerRequest: 2 });
+    }
     const key = 'omnikali:lock:' + name;
     const script = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`;
     return Number(await this.redis.eval(script, 1, key, ownerId)) === 1;
