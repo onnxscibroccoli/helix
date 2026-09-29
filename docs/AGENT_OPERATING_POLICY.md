@@ -4,91 +4,84 @@ This policy supplements the existing repository AGENTS.md.
 
 ## Core boundary
 
-Agents are allowed to be powerful inside explicitly designated **agent sandbox cloud accounts/projects**. They are not allowed to possess credentials that can reach OmniKali production.
+Agents may be powerful inside an explicitly designated **agent sandbox tenancy**. They are never allowed to possess credentials that can reach OmniKali production.
 
-The safety boundary is account/project isolation first, IAM permission boundaries second, and CI/CD deployment controls third.
+The safety boundary is:
+
+1. dedicated sandbox tenancy/project/account
+2. provider-native identity and permission boundaries
+3. production isolation and absence of trust
+4. protected CI/CD deployment authority
 
 - Work from a branch. Never push directly to main.
 - Production hosts, production data, and production cloud accounts are read-only to agents.
-- Agents may provision and destroy resources in a designated non-production sandbox account when the sandbox identity has been explicitly issued for that account.
-- Never request, print, store, or commit production AWS credentials, long-lived cloud access keys, GitHub PATs, database passwords, session cookies, bridge tokens, or model API keys.
+- Agents may provision and destroy resources only inside a designated sandbox tenancy.
+- Never request, print, store, or commit production credentials, long-lived cloud access keys, GitHub PATs, database passwords, session cookies, bridge tokens, or model API keys.
 - Infrastructure changes require source review, CI, and an explicit deployment workflow when they target production.
-- Prefer GitHub App installation tokens for automation and GitHub OIDC for AWS.
+- Prefer GitHub App installation tokens for automation and short-lived cloud federation.
 - Every autonomous change must include tests and an evidence summary in its PR.
 - If a repair fails twice, stop changing the system and record the failure with diagnostics.
 
-## AWS account isolation
+## Provider-neutral sandbox
 
-### Agent sandbox
+A sandbox is any provider boundary with independent credentials and resource ownership. Examples include:
 
-The agent sandbox is a separate AWS account under the organization. It is the only AWS account to which an autonomous agent may receive cloud credentials.
+- AWS account
+- OCI compartment/tenancy
+- GCP project
+- Azure subscription/resource group
+- Hetzner/Linode project or account
+- another provider tenancy with equivalent isolation
 
-Within that account, the agent may provision, modify, and destroy workload resources needed for experimentation and validation, including EC2, VPCs, EBS, ECS, databases, queues, buckets, load balancers, and other ordinary workload services.
+AWS Organizations is **not** required. AWS SCPs are optional defense-in-depth when Organizations is available.
 
-Full sandbox access does **not** mean organization-control-plane access. The sandbox identity must not be able to:
+The sandbox identity must not:
 
-- access or assume roles in the production account
-- move accounts between organizational units
-- detach or modify organization SCPs
-- modify organization/account ownership or billing controls
-- modify the sandbox permission boundary itself
-- create an unbounded IAM role or user
-- register credentials or trust relationships that escape the sandbox boundary
+- obtain production credentials
+- assume production roles
+- modify production resource policies
+- modify provider organization/account ownership or billing controls
+- remove or weaken its own required permission boundary
+- create an unbounded identity that escapes the sandbox contract
 
-A management-account administrator creates the sandbox account and organization-level SCPs. The agent cannot create its own safety boundary.
+## Production
 
-### Production
-
-Agents receive **zero AWS credentials for production**.
+Agents receive zero production cloud credentials.
 
 Production changes follow:
 
-agent -> branch -> PR -> required CI -> human/repository controls -> protected GitHub Actions environment -> GitHub OIDC -> production deployment role
+agent -> branch -> PR -> required CI -> human/repository controls -> protected deployment environment -> short-lived federation -> production deployment role
 
 The production deployment role is never exposed to pull-request code or agent shells.
 
-### Multi-cloud
+## Credential delivery
 
-The same isolation model applies outside AWS:
-
-- GCP: dedicated non-production project/folder
-- Azure: dedicated non-production subscription/resource group
-- Hetzner/Linode: dedicated non-production project/team/account
-- other providers: dedicated sandbox tenancy where supported
-
-A cloud credential is valid only for its sandbox tenancy. Production credentials are never mounted into the agent runtime.
-
-## AWS credential delivery
-
-Sandbox access uses short-lived credentials whenever the provider supports federation.
+Use short-lived credentials whenever the provider supports federation.
 
 Preferred path:
 
-agent runtime -> sandbox federation -> sandbox role -> permission boundary
+agent runtime -> sandbox federation -> sandbox identity -> provider-native boundary
 
-Do not place static AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY files under /var/lib/helix-agents.
+Do not place static credentials in /var/lib/helix-agents or repository workspaces.
 
-The agent runtime must be able to prove its current identity with sts:GetCallerIdentity, but it must not be able to assume a production role.
+## IaC
 
-## IaC requirement
-
-Agents may use AWS CDK, Terraform/OpenTofu, Ansible, cloud CLIs, SDKs, and provider APIs inside the sandbox when needed for testing.
+Provider-specific infrastructure may use CDK, Terraform/OpenTofu, Bicep, provider CLIs/SDKs, or Ansible. The provider adapter owns its resources.
 
 Production infrastructure remains source-controlled and deployment-controlled.
 
-For repeatable sandbox experiments, prefer IaC so resources can be tagged, audited, reconciled, and destroyed. Ad-hoc CLI/API calls are permitted for diagnosis and disposable experiments when they remain inside the sandbox account.
-
 ## Cost containment
 
-The sandbox account requires independent cost guardrails:
+Every sandbox requires:
 
-- AWS Budgets and alerts
-- service quota limits appropriate to the account
-- mandatory ownership/expiry tags where practical
+- ownership and expiry metadata
+- resource ceilings
+- provider-native budgets/alerts where available
 - scheduled cleanup/reconciliation
-- optional AWS Nuke or Cloud Custodian cleanup after an explicit review of protected exceptions
+- a dry-run cleanup path
+- explicit rejection of production identifiers
 
-Cleanup tooling must never run with production credentials or target production accounts.
+Free-tier status is an optimization, not a security guarantee.
 
 ## GitHub authority
 
@@ -102,18 +95,19 @@ The agent must not:
 - bypass required checks
 - modify production environment protection
 - create or rotate production deployment credentials
-- modify organization security controls as part of ordinary remediation
+- weaken provider isolation to repair a failed deployment
 
 ## Evidence requirement
 
 Every sandbox deployment records:
 
-- AWS account ID
+- provider
+- account/project/tenancy identifier
 - region
-- caller identity ARN
+- caller identity
 - Git SHA
 - IaC commit/assembly identifier
-- resource tags
+- resource IDs
 - creation and cleanup timestamps
 - test/acceptance results
 
