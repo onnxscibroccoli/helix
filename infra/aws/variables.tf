@@ -32,6 +32,36 @@ variable "allowed_gateway_cidr" {
 # When both IDs are supplied, Terraform manages the required Managed Login
 # branding style so a newly-created app client cannot regress to the
 # "Login pages unavailable" state.
+variable "cloudfront_distribution_id" {
+  type    = string
+  default = "E3AT3ETQQVLZJ4"
+
+  validation {
+    condition     = can(regex("^E[A-Z0-9]+$", var.cloudfront_distribution_id))
+    error_message = "cloudfront_distribution_id must be a CloudFront distribution ID."
+  }
+}
+
+variable "recovery_health_url" {
+  type    = string
+  default = "https://d22bad48irrbqe.cloudfront.net/"
+
+  validation {
+    condition     = can(regex("^https://", var.recovery_health_url))
+    error_message = "recovery_health_url must use HTTPS."
+  }
+}
+
+variable "recovery_instance_id" {
+  type    = string
+  default = "i-03b6a82d46271d9cd"
+
+  validation {
+    condition     = can(regex("^i-[0-9a-f]+$", var.recovery_instance_id))
+    error_message = "recovery_instance_id must be an EC2 instance ID."
+  }
+}
+
 variable "cognito_user_pool_id" {
   type    = string
   default = ""
