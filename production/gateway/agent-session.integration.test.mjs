@@ -56,6 +56,7 @@ const gateway = spawn(process.execPath, ["production/gateway/helix-gateway.mjs"]
   env: {
     ...process.env,
     GATEWAY_HOST: "127.0.0.1",
+    HELIX_DESKTOP_CAPABILITY_STORE: "memory",
     GATEWAY_PORT: String(gatewayPort),
     HELIX_HYPERVISOR_URL: `http://127.0.0.1:${hypervisorPort}`,
     HELIX_PUBLIC_ORIGIN: `http://127.0.0.1:${gatewayPort}`,
