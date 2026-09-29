@@ -2,8 +2,6 @@ name: Production runtime validation
 
 on:
   pull_request:
-    branches:
-      - "omnikali/production-db-bootstrap-20260926"
   workflow_dispatch:
 
 jobs:
@@ -16,9 +14,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: node --check production/gateway/state/task-policy.mjs
       - run: node --check production/gateway/state/task-state.mjs
       - run: node --check production/gateway/state/task-runner.mjs
       - run: node --check production/gateway/state/agent-executor.mjs
       - run: node --check production/agent/omni-agent.mjs
-      - run: node --test production/gateway/state/task-state.test.mjs production/gateway/state/task-runner.test.mjs production/gateway/state/agent-executor.test.mjs
+      - run: node --test production/gateway/state/task-policy.test.mjs production/gateway/state/task-state.test.mjs production/gateway/state/task-runner.test.mjs production/gateway/state/agent-executor.test.mjs production/gateway/state/task-dispatch.test.mjs
       - run: bash -n infra/aws/user-data.sh
