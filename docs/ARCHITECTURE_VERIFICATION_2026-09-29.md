@@ -160,3 +160,17 @@ Do not install or enable a Kubernetes ingress controller, Traefik, FRP, or other
 **AWS account-wide inventory:** incomplete due IAM restrictions.
 
 This document is an evidence record, not a claim that every historical component remains healthy at every later timestamp.
+
+
+## Fresh AWS reconciliation 2026-09-29
+
+Authorized AWS Core reconciliation independently verified:
+
+- RDS helix-control-plane: available, PostgreSQL 18.3, Multi-AZ, encrypted, private, deletion protection enabled.
+- RDS backup retention is currently 1 day.
+- CloudFormation stack helix-control-plane-data source template also declares BackupRetentionPeriod: 1, so the live setting matches its deployed source rather than being unexplained drift.
+- An attempted change to 14 days was rejected by AWS with FreeTierRestrictionError: the account's current Free Tier limits do not permit the requested retention period. No database configuration was changed by the failed request.
+- CloudFront distribution E3AT3ETQQVLZJ4 is deployed and its origin is the EC2 host serving the established nginx path.
+- The Helix EC2 instance i-03b6a82d46271d9cd is currently running.
+
+This reconciliation does not change the production architecture and does not treat the RDS backup requirement as satisfied.
