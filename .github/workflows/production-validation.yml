@@ -10,6 +10,19 @@ jobs:
   static-contracts:
     runs-on: ubuntu-latest
     env: { HELIX_SKIP_LIVE: "1" }
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: helix_test
+        options: >-
+          --health-cmd "pg_isready -U postgres -d helix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        ports:
+          - 5432:5432
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -24,6 +37,13 @@ jobs:
       - run: pytest -q test-suite/tests
       - run: npm ci --ignore-scripts
       - run: npm test
+      - run: npm run test:production-gateway
+        env:
+          HELIX_DESKTOP_CAPABILITY_STORE: memory
+      - run: node --test production/gateway/desktop-capability-store.postgres.test.mjs
+        env:
+          HELIX_DESKTOP_CAPABILITY_STORE: postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/helix_test
       - run: sudo apt-get update -qq && sudo apt-get install -y shellcheck && shellcheck production/ephemeral-teardown.sh infra/aws/user-data.sh
   live-hypervisor:
     if: github.event_name == 'workflow_dispatch'
