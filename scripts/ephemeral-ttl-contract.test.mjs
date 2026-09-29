@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const source = await readFile(new URL("../../scripts/hypervisor-daemon.mjs", import.meta.url), "utf8");
+const source = await readFile(new URL("./hypervisor-daemon.mjs", import.meta.url), "utf8");
 
 for (const needle of [
   "HELIX_EPHEMERAL_TTL_SECONDS",
