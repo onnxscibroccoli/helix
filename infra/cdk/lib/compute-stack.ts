@@ -63,7 +63,6 @@ export class ComputeStack extends cdk.Stack {
 
     const subnet = props.network.vpc.publicSubnets[0];
     this.instance = new ec2.CfnInstance(this, "Hypervisor", {
-      instanceType: props.instanceType,
       subnetId: subnet.subnetId,
       securityGroupIds: [props.network.gatewaySecurityGroup.securityGroupId],
       launchTemplate: {
