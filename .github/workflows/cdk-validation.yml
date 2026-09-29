@@ -1,0 +1,35 @@
+name: cdk-validation
+on:
+  pull_request:
+    paths:
+      - "infra/cdk/**"
+      - ".github/workflows/cdk-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/cdk/**"
+      - ".github/workflows/cdk-validation.yml"
+permissions:
+  contents: read
+jobs:
+  synth:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cdk
+    env:
+      CDK_DEFAULT_ACCOUNT: "000000000000"
+      CDK_DEFAULT_REGION: "us-east-1"
+      OMNIKALI_GITHUB_REPOSITORY: "onnxscibroccoli/helix"
+      OMNIKALI_GITHUB_REF: "refs/heads/main"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: infra/cdk/package.json
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - run: npm run synth
+      - run: node test/synthesis-contract.test.mjs
