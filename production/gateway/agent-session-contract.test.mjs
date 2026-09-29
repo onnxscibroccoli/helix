@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const required = [
-  ["POST /api/v1/sessions", "server-to-server launch"],
+  ['u.pathname==="/api/v1/sessions"', "server-to-server launch"],
   ["HELIX_AGENT_API_SECRET", "agent authentication"],
   ["workspaceId", "idempotency key"],
   ["persistent", "persistent tier"],
