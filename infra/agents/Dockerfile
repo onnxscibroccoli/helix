@@ -8,7 +8,7 @@ ENV PATH=/home/agent/.local/bin:/home/agent/.local/share/uv/tools/openhands/bin:
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git gh python3 python3-venv build-essential passwd \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --create-home --home-dir /home/agent --shell /bin/bash agent \
+ && /usr/sbin/useradd --create-home --home-dir /home/agent --shell /bin/bash agent \
  && npm install --global --omit=dev @anthropic-ai/claude-code \
  && su - agent -s /bin/bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh' \
  && /home/agent/.local/bin/uv tool install --python 3.12 openhands==${OPENHANDS_VERSION} \
