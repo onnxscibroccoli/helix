@@ -10,7 +10,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --home-dir /home/agent --shell /bin/bash agent \
  && npm install --global --omit=dev @anthropic-ai/claude-code \
- && curl -LsSf https://astral.sh/uv/install.sh | sh \
+ && su - agent -s /bin/bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh' \
  && /home/agent/.local/bin/uv tool install --python 3.12 openhands==${OPENHANDS_VERSION} \
  && chown -R agent:agent /home/agent
 
