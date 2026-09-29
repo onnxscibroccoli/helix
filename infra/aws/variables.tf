@@ -55,7 +55,7 @@ variable "helix_repo_url" {
 
 variable "helix_source_ref" {
   type    = string
-  default = "cc8bf77494f359e9c95115f990b0992f8847ec00"
+  default = "08aa51797b0bf5a42cb41e3aa6f44e45ce82d514"
 
   validation {
     condition     = can(regex("^[0-9a-f]{40}$", var.helix_source_ref))
