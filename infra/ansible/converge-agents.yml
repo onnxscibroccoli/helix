@@ -1,0 +1,97 @@
+- name: Converge coding agents
+  hosts: all
+  become: true
+  vars:
+    agent_user: helix-agent
+    agent_home: /var/lib/helix-agent
+    agent_workspace: /var/lib/helix-agent/workspaces
+    agent_python: "3.12"
+  tasks:
+    - name: Create dedicated non-root agent user
+      ansible.builtin.user:
+        name: "{{ agent_user }}"
+        home: "{{ agent_home }}"
+        create_home: true
+        system: true
+        shell: /bin/bash
+        groups: []
+        append: false
+        password_lock: true
+
+    - name: Create agent directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ agent_user }}"
+        group: "{{ agent_user }}"
+        mode: "0750"
+      loop:
+        - "{{ agent_home }}"
+        - "{{ agent_workspace }}"
+        - "{{ agent_home }}/.config"
+
+    - name: Verify Node.js major version
+      ansible.builtin.command:
+        cmd: node --version
+      register: node_version
+      changed_when: false
+
+    - name: Require Node.js 22+
+      ansible.builtin.assert:
+        that:
+          - node_version.stdout is match("^v(2[2-9]|[3-9][0-9])\\.")
+        fail_msg: "Claude Code host install requires Node.js 22+."
+
+    - name: Install Claude Code into isolated prefix
+      ansible.builtin.command:
+        cmd: npm install --global --prefix /opt/helix-agent-tools @anthropic-ai/claude-code
+      args:
+        creates: /opt/helix-agent-tools/bin/claude
+
+    - name: Install uv for agent user
+      ansible.builtin.shell:
+        cmd: curl -LsSf https://astral.sh/uv/install.sh | su - "{{ agent_user }}" -s /bin/bash -c 'cat >/tmp/uv-install.sh && bash /tmp/uv-install.sh'
+      args:
+        executable: /bin/bash
+        creates: "{{ agent_home }}/.local/bin/uv"
+
+    - name: Install OpenHands CLI
+      ansible.builtin.command:
+        cmd: "{{ agent_home }}/.local/bin/uv tool install openhands --python {{ agent_python }}"
+      become_user: "{{ agent_user }}"
+      environment:
+        HOME: "{{ agent_home }}"
+      args:
+        creates: "{{ agent_home }}/.local/bin/openhands"
+
+    - name: Install GitHub CLI
+      ansible.builtin.apt:
+        name: gh
+        state: present
+        update_cache: true
+
+    - name: Install agent command wrapper
+      ansible.builtin.copy:
+        dest: /usr/local/bin/helix-agent-env
+        mode: "0755"
+        owner: root
+        group: root
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          export HOME=/var/lib/helix-agent
+          export PATH=/opt/helix-agent-tools/bin:/var/lib/helix-agent/.local/bin:/usr/bin:/bin
+          exec "$@"
+
+    - name: Verify Claude CLI installation
+      ansible.builtin.command:
+        cmd: /opt/helix-agent-tools/bin/claude --version
+      changed_when: false
+
+    - name: Verify OpenHands CLI installation
+      ansible.builtin.command:
+        cmd: "{{ agent_home }}/.local/bin/openhands --version"
+      become_user: "{{ agent_user }}"
+      environment:
+        HOME: "{{ agent_home }}"
+      changed_when: false
