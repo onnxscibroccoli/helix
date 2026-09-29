@@ -20,4 +20,6 @@ for (const needle of [
 
 assert.ok(bin.includes("PlatformNetworkStack"));
 assert.ok(bin.includes("PostgresStack"));
+assert.ok(bin.includes("OMNIKALI_ALLOWED_GATEWAY_CIDR"));
+assert.ok(bin.includes("PlatformNetworkStack"));
 console.log("cdk platform contract: PASS");
