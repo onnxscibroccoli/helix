@@ -24,8 +24,12 @@ variable "persistent_volume_size" {
 }
 
 variable "allowed_gateway_cidr" {
-  type    = string
-  default = "0.0.0.0/0"
+  type = string
+
+  validation {
+    condition     = can(cidrhost(var.allowed_gateway_cidr, 0))
+    error_message = "allowed_gateway_cidr must be a valid IPv4 or IPv6 CIDR block."
+  }
 }
 
 # Optional existing Cognito app client used by the Helix gateway.
@@ -54,8 +58,7 @@ variable "helix_repo_url" {
 }
 
 variable "helix_source_ref" {
-  type    = string
-  default = "08aa51797b0bf5a42cb41e3aa6f44e45ce82d514"
+  type = string
 
   validation {
     condition     = can(regex("^[0-9a-f]{40}$", var.helix_source_ref))
