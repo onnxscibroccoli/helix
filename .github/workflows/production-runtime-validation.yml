@@ -2,8 +2,6 @@ name: Production runtime validation
 
 on:
   pull_request:
-    branches:
-      - "omnikali/production-db-bootstrap-20260926"
   workflow_dispatch:
 
 jobs:
