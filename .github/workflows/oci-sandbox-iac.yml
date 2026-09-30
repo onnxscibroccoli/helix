@@ -1,0 +1,44 @@
+name: OCI Sandbox IaC Validation
+
+on:
+  pull_request:
+    paths:
+      - "infra/oci/**"
+      - ".github/workflows/oci-sandbox-iac.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify OCI adapter boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f infra/oci/README.md
+          grep -q 'bb86b055ac842b9ce6ca88880787f90bf5f300a6' infra/oci/README.md
+          grep -q 'us-ashburn-1' infra/oci/README.md
+          grep -q 'VM.Standard.A1.Flex' infra/oci/README.md
+          grep -q 'JWT-to-RPST' infra/oci/README.md
+          if grep -RniE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|aws_access_key_id|aws_secret_access_key' infra/oci; then
+            echo "Credential material detected"
+            exit 1
+          fi
+
+  terraform-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Terraform availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v terraform >/dev/null 2>&1; then
+            echo "Terraform is not installed on this runner; implementation validation remains blocked."
+            exit 1
+          fi
+          terraform version
