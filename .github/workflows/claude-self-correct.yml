@@ -27,10 +27,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout trusted main
-        uses: actions/checkout@fd1c128679612beff4ca259c78021c506e8aa7a7
+        uses: actions/checkout@v4
 
       - name: Claude source repair
-        uses: anthropics/claude-code-action@fd1c128679612beff4ca259c78021c506e8aa7a7
+        uses: anthropics/claude-code-action@v1
         with:
           anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
           anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
