@@ -38,3 +38,10 @@ npm test                            # if the change is application code
 ```
 
 Live KVM assertions require `/dev/kvm` and authorization. Do not invent them.
+
+## App Builder brand pin (kept because `scripts/brand-check.test.mjs` asserts it)
+
+In-flight share cards use `/workspace/.grok/og-pending`. That marker is stale after 10 minutes.
+
+6. **Brand-asset pass — a subagent, never waited for.** never wait_tasks and never get_task_output
+7. Verify the rest of the product independently.
