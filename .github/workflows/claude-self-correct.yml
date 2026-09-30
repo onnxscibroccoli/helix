@@ -31,19 +31,12 @@ jobs:
           additional_permissions: |
             actions: read
           prompt: |
+            Read CLAUDE.md and AGENTS.md only. Do not ingest .grok/ or the whole repo.
             A trusted main-branch production-validation run failed.
-
-            Diagnose the failure using the repository and CI evidence.
-            Fix only the source/configuration defect that caused the failure.
-            Do not weaken tests, security controls, branch protection, target authorization,
-            credential isolation, or production safety gates.
-            Do not deploy to AWS.
-            Do not use or request production credentials.
-            Run the narrowest relevant tests and then the repository validation required
-            by the failure.
-            Work on a new agent/self-correction branch and leave a reviewable change.
-            Do not merge main.
-            Report the exact root cause, changed files, tests run, and remaining uncertainty.
+            Diagnose from CI logs plus the single failing source file.
+            Fix only that defect. Do not weaken tests or safety gates.
+            Do not deploy to AWS. Do not request production credentials.
+            Leave a reviewable branch. Do not merge main.
           claude_args: |
-            --max-turns 10
+            --max-turns 8
             --allowedTools "Read,Edit,Write,Bash(git status),Bash(git diff),Bash(npm ci),Bash(npm test),Bash(npm run test:production-gateway),Bash(terraform -chdir=infra/terraform fmt -check),Bash(terraform -chdir=infra/terraform validate)"
