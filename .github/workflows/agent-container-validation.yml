@@ -26,19 +26,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: http.https://github.com/.extraheader
+          GIT_CONFIG_VALUE_0: AUTHORIZATION: bearer ${{ github.token }}
         run: |
           set -euo pipefail
           git init --quiet repo
           git -C repo remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          auth=( -c "http.extraheader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" )
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            git "${auth[@]}" -C repo fetch --depth=1 origin "refs/pull/${PR_NUMBER}/merge"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            git -C repo fetch --depth=1 origin "refs/pull/${PR_NUMBER}/merge"
           else
-            git "${auth[@]}" -C repo fetch --depth=1 origin "$GITHUB_SHA"
+            git -C repo fetch --depth=1 origin "${GITHUB_SHA}"
           fi
           git -C repo checkout --detach FETCH_HEAD
-          git -C repo rev-parse HEAD
-
+          echo "checked_out=$(git -C repo rev-parse HEAD) event=${GITHUB_EVENT_NAME} requested=${GITHUB_SHA}"
 
       - name: Build container
         working-directory: repo
@@ -47,4 +48,9 @@ jobs:
       - name: Run non-root smoke tests
         working-directory: repo
         run: |
-          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev             --security-opt no-new-privileges             --cap-drop ALL             --user 1000:1000             omnikali-coding-agent:ci             -lc 'id -u; claude --version; openhands --version; gh --version'
+          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev \
+            --security-opt no-new-privileges \
+            --cap-drop ALL \
+            --user 1000:1000 \
+            omnikali-coding-agent:ci \
+            -lc 'id -u; claude --version; openhands --version; gh --version'
