@@ -22,13 +22,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout without third-party action
+      - name: Checkout the commit under test without a third-party action
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GIT_CONFIG_COUNT: "1"
-          GIT_CONFIG_KEY_0: http.https://github.com/.extraheader
-          GIT_CONFIG_VALUE_0: AUTHORIZATION: bearer ${{ github.token }}
-        run: git clone --depth=1 "https://github.com/${GITHUB_REPOSITORY}.git" repo
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+          git init --quiet repo
+          git -C repo remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          auth=( -c "http.extraheader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" )
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git "${auth[@]}" -C repo fetch --depth=1 origin "refs/pull/${PR_NUMBER}/merge"
+          else
+            git "${auth[@]}" -C repo fetch --depth=1 origin "$GITHUB_SHA"
+          fi
+          git -C repo checkout --detach FETCH_HEAD
+          git -C repo rev-parse HEAD
+
 
       - name: Build container
         working-directory: repo
