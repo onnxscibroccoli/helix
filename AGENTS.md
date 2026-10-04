@@ -1,5 +1,23 @@
 # Helix agent operating contract
 
+## Ownership (OMNIKALI-MODULARIZATION-2026-10-04)
+
+Helix owns authenticated desktop session / RFB tickets, the live gateway, hypervisor control, AWS/OCI IaC, and production contracts.
+
+Helix does **not** own Android Rish (`broccoli-rish`), Grasshopper task lifecycle, the public discovery door (`omnikali`), the K8s substrate (`grasshopper-kubernetes`), or the in-browser v86 PC (`kiln`).
+
+Do not split this repository into helix-app / helix-infra / helix-hypervisor until G2 (fresh production acceptance) and G3 (clean-host reconstruction) pass. Internal packages in this repo are allowed.
+
+Frozen production path:
+
+```text
+omnikali discovery door -> CloudFront -> nginx :80 -> Helix :8092 -> libvirt/QEMU -> helix-omnikali
+```
+
+Host console is a different machine: `/novnc/vnc.html` -> host websockify :6080 -> host VNC :5900. Do not collapse those paths.
+
+---
+
 Helix is the OmniKali cloud desktop control plane: auth, workspace lifecycle, KVM guests, and browser remote display.
 
 This file is the only always-on agent context. Do not ingest `.grok/`, `docs/` trees, or `infra/` wholesale.
