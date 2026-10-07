@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OmniKali host memory guard every 30 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Unit=omnikali-memory-guard.service
+
+[Install]
+WantedBy=timers.target
