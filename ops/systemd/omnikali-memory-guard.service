@@ -1,0 +1,8 @@
+[Unit]
+Description=OmniKali host memory pressure guard
+After=libvirtd.service
+Wants=libvirtd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/omnikali-memory-guard
