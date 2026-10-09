@@ -27,7 +27,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GIT_CONFIG_COUNT: "1"
           GIT_CONFIG_KEY_0: http.https://github.com/.extraheader
-          GIT_CONFIG_VALUE_0: AUTHORIZATION: bearer ${{ github.token }}
+          GIT_CONFIG_VALUE_0: "AUTHORIZATION: bearer ${{ github.token }}"
         run: git clone --depth=1 "https://github.com/${GITHUB_REPOSITORY}.git" repo
 
       - name: Build container
@@ -37,4 +37,9 @@ jobs:
       - name: Run non-root smoke tests
         working-directory: repo
         run: |
-          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev             --security-opt no-new-privileges             --cap-drop ALL             --user 1000:1000             omnikali-coding-agent:ci             -lc 'id -u; claude --version; openhands --version; gh --version'
+          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev \
+            --security-opt no-new-privileges \
+            --cap-drop ALL \
+            --user 1000:1000 \
+            omnikali-coding-agent:ci \
+            -lc 'id -u; claude --version; openhands --version; gh --version'
