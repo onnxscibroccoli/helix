@@ -1,0 +1,25 @@
+name: Ollama CI Observatory
+
+on:
+  workflow_run:
+    workflows:
+      - "*"
+      - "!Ollama CI Observatory"
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  failed-run-analysis:
+    if: >-
+      ${{ github.event.workflow_run.name != 'Ollama CI Observatory' &&
+          github.event.workflow_run.conclusion != 'success' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: onnxscibroccoli/Grasshopper/.github/workflows/ollama-ci-observer-reusable.yml@main
+    with:
+      failed_run_id: ${{ github.event.workflow_run.id }}
+      failed_conclusion: ${{ github.event.workflow_run.conclusion }}
