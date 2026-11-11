@@ -1,5 +1,8 @@
 # Helix
 
+
+> **For technical reviewers:** [Source-linked capability evidence, executable checks and current limitations](docs/PORTFOLIO_READINESS.md) · [prioritized remediation issue](https://github.com/onnxscibroccoli/helix/issues/66). This is an experimental/software evidence portfolio, not an attestation of production operation or employment history.
+
 **Status:** Cloud desktop control plane / active production reconstruction and validation  
 **Repository:** `onnxscibroccoli/helix`  
 **Documentation snapshot:** 2026-09-29 00:58 EDT
