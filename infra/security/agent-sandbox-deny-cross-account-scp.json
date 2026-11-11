@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyCrossAccountRoleAssumption",
+      "Effect": "Deny",
+      "Action": "sts:AssumeRole",
+      "Resource": "arn:aws:iam::*:role/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:ResourceAccount": "${aws:PrincipalAccount}"
+        }
+      }
+    },
+    {
+      "Sid": "DenyOrganizationControlPlane",
+      "Effect": "Deny",
+      "Action": ["organizations:*", "account:*", "billing:*", "ce:*", "cur:*", "purchase-orders:*", "savingsplans:*", "support:*"],
+      "Resource": "*"
+    }
+  ]
+}

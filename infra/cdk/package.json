@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc --noEmit",
     "synth": "cdk synth --strict",
-    "diff": "cdk diff --strict"
+    "diff": "cdk diff --strict",
+    "synth:agent-sandbox": "cdk synth --app 'npx tsx bin/agent-sandbox.ts' --strict"
   },
   "dependencies": {
     "aws-cdk-lib": "2.271.0",
